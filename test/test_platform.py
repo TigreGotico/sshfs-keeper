@@ -157,9 +157,10 @@ def test_build_rsync_cmd_basic() -> None:
 
 
 def test_build_rsync_cmd_with_identity() -> None:
-    sc = SyncConfig(name="j", source="/src", target="/dst", identity="/key")
+    # identity is only injected via -e ssh for remote paths
+    sc = SyncConfig(name="j", source="/src", target="user@host:/dst", identity="/key")
     cmd = _build_rsync_cmd(sc)
-    assert any("ssh -i /key" in part for part in cmd)
+    assert any("ssh" in part and "-i /key" in part for part in cmd)
 
 
 def test_build_lsyncd_cmd_local_to_local(tmp_path: Path) -> None:

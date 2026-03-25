@@ -777,11 +777,11 @@
       <div class="field">
         <label>Sync tool</label>
         <select id="s-sync-tool" name="sync_tool">
-          <option value="rsync">rsync — copies only changed files, very efficient (recommended)</option>
-          <option value="lsyncd">lsyncd — watches for file changes and syncs instantly (requires lsyncd)</option>
-          <option value="rclone">rclone — for S3, Google Drive, Dropbox, or cloud storage</option>
+          <option value="rsync">rsync (direct SSH) — delta sync over SSH, bypasses FUSE mount (recommended)</option>
+          <option value="lsyncd">lsyncd (direct SSH) — real-time inotify + rsync over SSH (requires lsyncd)</option>
+          <option value="rclone">rclone — S3, GDrive, FTP, WebDAV, or unstable/cloud connections</option>
         </select>
-        <span class="hint">rsync is the right choice for most situations. lsyncd reacts to changes in real time instead of waiting for the next scheduled run. rclone is needed for cloud storage.</span>
+        <span class="hint">rsync and lsyncd transfer directly over SSH — not through the FUSE mount — so they work even when the mount is stale. rclone is better for cloud storage or unreliable networks.</span>
       </div>
       <div class="field">
         <label>Extra flags <span style="color:#94a3b8;font-weight:400">(optional)</span></label>

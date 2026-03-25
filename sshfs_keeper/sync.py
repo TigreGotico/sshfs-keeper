@@ -60,8 +60,20 @@ class SyncState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
+_REMOTE_RE = re.compile(r"^[^/][^:]*:")
+
+
+def _is_remote(path: str) -> bool:
+    """Return True if *path* looks like a remote rsync path (user@host:/…)."""
+    return bool(_REMOTE_RE.match(path))
+
+
 def _build_rsync_cmd(cfg: "SyncConfig") -> list[str]:  # type: ignore[name-defined]
     """Build the rsync command list for *cfg*.
+
+    Automatically injects ``-e ssh`` with BatchMode and StrictHostKeyChecking
+    when either source or target is a remote path, so rsync always transfers
+    directly over SSH rather than going through the FUSE mount.
 
     Args:
         cfg: Sync job configuration.
@@ -69,9 +81,13 @@ def _build_rsync_cmd(cfg: "SyncConfig") -> list[str]:  # type: ignore[name-defin
     Returns:
         Argument list suitable for :func:`asyncio.create_subprocess_exec`.
     """
-    cmd = ["rsync"] + cfg.options.split() + [cfg.source, cfg.target]
-    if cfg.identity:
-        cmd += ["-e", f"ssh -i {cfg.identity} -o BatchMode=yes -o StrictHostKeyChecking=accept-new"]
+    cmd = ["rsync"] + cfg.options.split()
+    if _is_remote(cfg.source) or _is_remote(cfg.target):
+        ssh = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+        if cfg.identity:
+            ssh += f" -i {cfg.identity}"
+        cmd += ["-e", ssh]
+    cmd += [cfg.source, cfg.target]
     return cmd
 
 
