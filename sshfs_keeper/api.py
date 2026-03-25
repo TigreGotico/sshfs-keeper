@@ -224,6 +224,61 @@ async def prometheus_metrics() -> PlainTextResponse:
     return PlainTextResponse(content=body, media_type="text/plain; version=0.0.4")
 
 
+@app.get("/api/logs")
+async def api_logs(lines: int = 300) -> JSONResponse:
+    """Return the most recent *lines* log lines from journalctl or the log file."""
+    cfg = _get_config()
+    if cfg.daemon.log_file:
+        try:
+            with open(cfg.daemon.log_file) as fh:
+                all_lines = fh.readlines()
+            return JSONResponse({"lines": [l.rstrip() for l in all_lines[-lines:]]})
+        except OSError:
+            pass
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "journalctl", "--user", "-u", "sshfs-keeper",
+            f"-n", str(lines), "--no-pager", "-o", "short-iso",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        return JSONResponse({"lines": stdout.decode(errors="replace").splitlines()})
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/logs/stream")
+async def api_logs_stream(request: Request) -> StreamingResponse:
+    """SSE live tail of sshfs-keeper logs via ``journalctl -f``."""
+    async def _generate() -> AsyncGenerator[str, None]:
+        proc = await asyncio.create_subprocess_exec(
+            "journalctl", "--user", "-u", "sshfs-keeper",
+            "-f", "-n", "0", "--no-pager", "-o", "short-iso",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            assert proc.stdout is not None
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    raw = await asyncio.wait_for(proc.stdout.readline(), timeout=30)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                if not raw:
+                    break
+                line = raw.decode(errors="replace").rstrip()
+                yield f"data: {json.dumps(line)}\n\n"
+        finally:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+
+    return StreamingResponse(_generate(), media_type="text/event-stream")
+
+
 @app.get("/api/events")
 async def sse_events(request: Request) -> StreamingResponse:
     """Server-Sent Events stream for real-time mount status changes."""

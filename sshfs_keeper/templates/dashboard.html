@@ -334,6 +334,7 @@
     <div class="tab active" onclick="switchTab('mounts')">Mounts</div>
     <div class="tab" onclick="switchTab('syncs')">Sync</div>
     <div class="tab" onclick="switchTab('transfers')">Transfers</div>
+    <div class="tab" onclick="switchTab('logs');logsInit()">Logs</div>
     <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
     <div class="tab" onclick="switchTab('settings')">Settings</div>
     <div class="tab" onclick="switchTab('notifications')">Notifications</div>
@@ -503,6 +504,25 @@
         </tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ===== LOGS TAB ===== -->
+  <div class="tab-panel" id="tab-logs">
+    <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;flex-wrap:wrap">
+      <h3 style="font-size:0.85rem;color:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0">Daemon Logs</h3>
+      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;cursor:pointer">
+        <input type="checkbox" id="logs-live" onchange="logsToggleLive()" style="accent-color:var(--accent)"> Live tail
+      </label>
+      <span id="logs-live-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite"></span>
+      <button class="btn" style="font-size:0.78rem;padding:0.2rem 0.6rem;margin-left:auto" onclick="logsRefresh()">↺ Refresh</button>
+      <select id="logs-lines" onchange="logsRefresh()" style="font-size:0.78rem;padding:0.2rem 0.4rem;width:auto">
+        <option value="100">100 lines</option>
+        <option value="300" selected>300 lines</option>
+        <option value="500">500 lines</option>
+        <option value="1000">1000 lines</option>
+      </select>
+    </div>
+    <div id="logs-output" class="log-output" style="max-height:60vh;font-size:0.75rem;line-height:1.6">Loading…</div>
   </div>
 
   <!-- ===== SSH KEYS TAB ===== -->
@@ -1231,6 +1251,51 @@
     if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
     if (bytes < 1073741824) return (bytes/1048576).toFixed(1) + ' MB';
     return (bytes/1073741824).toFixed(1) + ' GB';
+  }
+
+  // ---- logs tab ----
+  let _logsEs = null;
+  let _logsInited = false;
+
+  function logsInit() {
+    if (_logsInited) return;
+    _logsInited = true;
+    logsRefresh();
+  }
+
+  function logsRefresh() {
+    if (document.getElementById('logs-live')?.checked) return;
+    const n = document.getElementById('logs-lines')?.value || 300;
+    const el = document.getElementById('logs-output');
+    el.textContent = 'Loading…';
+    fetch(`/api/logs?lines=${n}`)
+      .then(r => r.json())
+      .then(d => {
+        el.textContent = (d.lines || []).join('\n') || '(no log output)';
+        el.scrollTop = el.scrollHeight;
+      })
+      .catch(() => { el.textContent = 'Failed to load logs.'; });
+  }
+
+  function logsToggleLive() {
+    const live = document.getElementById('logs-live').checked;
+    const dot = document.getElementById('logs-live-dot');
+    if (live) {
+      dot.style.display = '';
+      const el = document.getElementById('logs-output');
+      el.textContent = '';
+      _logsEs = new EventSource('/api/logs/stream');
+      _logsEs.onmessage = e => {
+        const line = JSON.parse(e.data);
+        el.textContent += line + '\n';
+        el.scrollTop = el.scrollHeight;
+      };
+      _logsEs.onerror = () => { dot.style.background = '#ef4444'; };
+    } else {
+      dot.style.display = 'none';
+      if (_logsEs) { _logsEs.close(); _logsEs = null; }
+      logsRefresh();
+    }
   }
 </script>
 </body>
