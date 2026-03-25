@@ -1113,7 +1113,7 @@
   function openTransferLog(id) {
     const overlay = document.getElementById('log-overlay');
     const title = document.getElementById('log-modal-title');
-    const output = document.getElementById('log-output');
+    const output = document.getElementById('log-content');
     title.textContent = `Transfer ${id} — output`;
     output.textContent = 'Loading…';
     overlay.classList.add('open');
