@@ -967,3 +967,35 @@ async def api_cancel_transfer(tid: str, request: Request) -> JSONResponse:
     if not ok:
         raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found or already finished")
     return _htmx_json({"id": tid, "cancelled": True}, toast=f"Transfer {tid} cancelled")
+
+
+@app.post("/api/transfers/{tid}/resume")
+async def api_resume_transfer(tid: str, request: Request) -> JSONResponse:
+    """Re-run a finished/failed/cancelled transfer, adding --partial for rsync protocols.
+
+    Args:
+        tid: Transfer ID of the transfer to resume.
+    """
+    _check_api_key(request)
+    tm = _get_transfer_manager()
+    state = tm._transfers.get(tid)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found")
+    if state.status.value in ("pending", "running"):
+        raise HTTPException(status_code=409, detail="Transfer is still running")
+    req = state.request
+    # For rsync-based protocols inject --partial --append-verify for resume
+    extra = req.options
+    if req.protocol in ("rsync_ssh", "local"):
+        flags = "--partial --append-verify"
+        extra = f"{flags} {extra}".strip() if extra else flags
+    new_req = TransferRequest(
+        protocol=req.protocol,
+        source=req.source,
+        dest=req.dest,
+        move=req.move,
+        identity=req.identity,
+        options=extra,
+    )
+    new_tid = await tm.start(new_req)
+    return _htmx_json({"id": new_tid, "resumed_from": tid}, toast=f"Resumed as {new_tid}")
