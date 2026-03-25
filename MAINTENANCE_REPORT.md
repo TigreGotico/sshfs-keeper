@@ -1,5 +1,19 @@
 # Maintenance Report
 
+## 2026-03-25 — Multi-target sync implementation (continued)
+
+**AI Model**: claude-haiku-4-5
+**Actions Taken**:
+- **Dual SyncConfig issue**: Discovered two `SyncConfig` class definitions (in `config.py` and `sync.py`). API was importing from `config.py` which lacked the `targets` field despite the fix being in `sync.py`.
+- **Fixed config.py**: Added `targets: list[str] = field(default_factory=list)` to `SyncConfig` dataclass in `config.py` to match `sync.py`.
+- **Fixed TOML serialization**: Updated `save()` method to serialize `targets` array to TOML format when non-empty.
+- **Fixed API response**: Added `targets` field to `get_snapshot()` so API responses expose the multi-target destinations.
+- **Verified multi-target**: Tested creating sync jobs with multiple targets via `POST /api/syncs`; all targets are properly stored and returned.
+- **Updated FAQ**: Added "How do I sync to multiple backup destinations?" section documenting the `targets` config field and UI workflow.
+- **Cleanup**: Removed test sync jobs (`test_multi_target`, `test_multi_target2`).
+
+**Oversight**: Root cause analysis identified the dual SyncConfig definitions; fix was incremental (config.py field → TOML serialization → snapshot response). Multi-target feature now end-to-end tested via API and dashboard.
+
 ## 2026-03-25 — Sync progress tracking and config wipe protection
 
 **AI Model**: claude-sonnet-4-6

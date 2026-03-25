@@ -95,6 +95,22 @@ sync_tool = "lsyncd"
 
 lsyncd must be installed. For local-to-local sync `default.rsync` is used; for remote targets `default.rsyncssh` is used.
 
+## How do I sync to multiple backup destinations?
+
+Set the `targets` array in the sync config to sync the same source to multiple destinations:
+
+```toml
+[[sync]]
+name = "backup"
+source = "/home/user/data"
+target = "backup1@host1:/backups/data"
+targets = ["backup2@host2:/backups/data", "backup3@host3:/backups/data"]
+interval = 3600
+sync_tool = "rsync"
+```
+
+Each target is synced sequentially. The sync card shows combined metrics (total bytes, files transferred) and fail_count tracks failures across all targets. In the web UI, click **Edit** on a sync card to add more "Additional destinations".
+
 ## How do I install sshfs-keeper as a system service?
 
 ```bash
