@@ -387,7 +387,7 @@
           hx-on::after-request="onTransferStarted(event)"
           style="margin-bottom:1.4rem">
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:0.8rem;align-items:start">
         <div>
           <label>Protocol</label>
           <select name="protocol" id="tr-protocol" onchange="applyTransferProtocol()">
@@ -403,31 +403,31 @@
         </div>
         <div>
           <label>Mode</label>
-          <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem">
+          <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
               <input type="radio" name="move" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value=false"> Copy
             </label>
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="move" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value=true"> Move <span style="font-size:0.72rem;color:var(--dimmed)">(deletes source after transfer)</span>
+              <input type="radio" name="move" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value=true"> Move
             </label>
           </div>
+          <span class="hint">Move deletes source files after transfer</span>
           <input type="hidden" name="move" id="tr-move" value="false">
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
-        <div>
-          <label>Source</label>
-          <input type="text" name="source" id="tr-source"
-                 placeholder="user@host:/path/to/source" autocomplete="off" required>
-          <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
-        </div>
-        <div>
-          <label>Destination</label>
-          <input type="text" name="dest" id="tr-dest"
-                 placeholder="/mnt/backup/photos" autocomplete="off" required>
-          <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
-        </div>
+      <div>
+        <label>Source</label>
+        <input type="text" name="source" id="tr-source"
+               placeholder="user@host:/path/to/source" autocomplete="off" required>
+        <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
+      </div>
+
+      <div>
+        <label>Destination</label>
+        <input type="text" name="dest" id="tr-dest"
+               placeholder="/mnt/backup/photos" autocomplete="off" required>
+        <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
       </div>
 
       <div id="tr-identity-row">
@@ -459,17 +459,15 @@
     <!-- Transfer history -->
     <h3 style="font-size:0.85rem;color:var(--label);margin-bottom:0.6rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Recent Transfers</h3>
     <div style="overflow-x:auto">
-      <table id="transfers-table" style="width:100%;border-collapse:collapse;font-size:0.8rem">
+      <table id="transfers-table" style="width:100%;border-collapse:collapse;font-size:0.85rem">
         <thead>
           <tr style="color:var(--label);border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">ID</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Protocol</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Source</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Destination</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Status</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Progress</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Time</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Actions</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Protocol</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;width:40%">Source → Destination</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Status</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500">Progress</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Time</th>
+            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500">Actions</th>
           </tr>
         </thead>
         <tbody id="transfers-tbody"
@@ -477,7 +475,7 @@
                hx-trigger="refresh, every 3s"
                hx-swap="innerHTML"
                hx-indicator="#transfers-indicator">
-          <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
+          <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
         </tbody>
       </table>
     </div>

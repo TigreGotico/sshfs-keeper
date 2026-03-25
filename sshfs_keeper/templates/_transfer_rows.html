@@ -1,13 +1,14 @@
 {% for t in transfers %}
 <tr>
-  <td><code style="font-size:0.75rem">{{ t.id }}</code></td>
-  <td>
+  <td style="white-space:nowrap">
     <span class="badge badge-tool">{{ t.protocol }}</span>
     {% if t.move %}<span class="badge" style="background:var(--b-stale-bg);color:var(--b-stale-fg);font-size:0.65rem">move</span>{% endif %}
   </td>
-  <td style="font-size:0.78rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.source }}">{{ t.source }}</td>
-  <td style="font-size:0.78rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.dest }}">{{ t.dest }}</td>
-  <td>
+  <td style="font-size:0.82rem">
+    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.source }}">{{ t.source }}</div>
+    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dimmed)" title="{{ t.dest }}">→ {{ t.dest }}</div>
+  </td>
+  <td style="white-space:nowrap">
     {% if t.status == 'running' %}
       <span class="badge badge-mounting">● running</span>
     {% elif t.status == 'done' %}
@@ -20,26 +21,26 @@
       <span class="badge badge-idle">{{ t.status }}</span>
     {% endif %}
   </td>
-  <td style="font-size:0.72rem;color:var(--label);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.last_progress }}">
+  <td style="font-size:0.8rem;color:var(--label);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.last_progress }}">
     {% if t.status == 'failed' and t.error %}
-      <span style="color:var(--b-error-fg)">{{ t.error[:60] }}</span>
+      <span style="color:var(--b-error-fg)">{{ t.error[:80] }}</span>
     {% elif t.last_progress %}
-      {{ t.last_progress[:60] }}
+      {{ t.last_progress[:80] }}
     {% elif t.status == 'running' %}
       <span style="color:var(--b-mounting-fg)">starting…</span>
     {% else %}
       —
     {% endif %}
   </td>
-  <td style="font-size:0.72rem;color:var(--muted)">
+  <td style="font-size:0.8rem;color:var(--muted);white-space:nowrap">
     {% if t.duration %}{{ "%.1f"|format(t.duration) }}s{% else %}—{% endif %}
   </td>
   <td>
     <div style="display:flex;gap:0.3rem">
-      <button class="btn" style="font-size:0.72rem;padding:0.2rem 0.5rem"
+      <button class="btn" style="font-size:0.75rem;padding:0.25rem 0.6rem"
               onclick="openTransferLog('{{ t.id }}')">log</button>
       {% if t.status in ('running', 'pending') %}
-      <button class="btn btn-danger" style="font-size:0.72rem;padding:0.2rem 0.5rem"
+      <button class="btn btn-danger" style="font-size:0.75rem;padding:0.25rem 0.5rem"
               hx-delete="/api/transfers/{{ t.id }}"
               hx-swap="none"
               hx-on::after-request="htmx.trigger('#transfers-table tbody','refresh')">✕</button>
@@ -50,7 +51,7 @@
 {% endfor %}
 {% if not transfers %}
 <tr>
-  <td colspan="8" style="text-align:center;padding:2rem;color:var(--dimmed)">
+  <td colspan="6" style="text-align:center;padding:2rem;color:var(--dimmed)">
     No transfers yet — start one above.
   </td>
 </tr>
