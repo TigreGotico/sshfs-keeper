@@ -17,7 +17,6 @@ from sshfs_keeper import metrics as _metrics_module
 from sshfs_keeper.config import AppConfig, CONFIG_DIR, MountConfig, SyncConfig, KEYS_DIR
 from sshfs_keeper.monitor import Monitor, MountState
 from sshfs_keeper.sync import SyncManager, SyncState
-from sshfs_keeper.transfer import TransferManager, TransferRequest
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 _VERSION = "0.1.0"
@@ -43,16 +42,10 @@ templates.env.cache = _NoCache()  # type: ignore[assignment]
 _monitor: Optional[Monitor] = None
 _config: Optional[AppConfig] = None
 _sync_manager: Optional[SyncManager] = None
-_transfer_manager: Optional[TransferManager] = None
 _sse_queues: list[asyncio.Queue[Optional[dict[str, Any]]]] = []
 
 
-def setup(
-    monitor: Monitor,
-    config: AppConfig,
-    sync_manager: Optional[SyncManager] = None,
-    transfer_manager: Optional[TransferManager] = None,
-) -> None:
+def setup(monitor: Monitor, config: AppConfig, sync_manager: Optional[SyncManager] = None) -> None:
     """Wire global module-level singletons and register the SSE event listener.
 
     Args:
@@ -60,11 +53,10 @@ def setup(
         config: Loaded :class:`~sshfs_keeper.config.AppConfig`.
         sync_manager: Optional running :class:`~sshfs_keeper.sync.SyncManager` instance.
     """
-    global _monitor, _config, _sync_manager, _transfer_manager
+    global _monitor, _config, _sync_manager
     _monitor = monitor
     _config = config
     _sync_manager = sync_manager
-    _transfer_manager = transfer_manager
     monitor.add_event_listener(_broadcast_event)
 
 
@@ -108,12 +100,6 @@ def _get_sync_manager() -> SyncManager:
     if _sync_manager is None:
         raise RuntimeError("SyncManager not initialised")
     return _sync_manager
-
-
-def _get_transfer_manager() -> TransferManager:
-    if _transfer_manager is None:
-        raise RuntimeError("TransferManager not initialised")
-    return _transfer_manager
 
 
 def _get_config() -> AppConfig:
@@ -170,15 +156,6 @@ class NotificationsPayload(BaseModel):
     on_backoff: bool = False
 
 
-class TransferPayload(BaseModel):
-    protocol: str  # "rsync_ssh" | "scp" | "rclone" | "local"
-    source: str
-    dest: str
-    move: bool = False
-    identity: Optional[str] = None
-    options: str = ""
-
-
 # ------------------------------------------------------------------
 # Dashboard
 # ------------------------------------------------------------------
@@ -199,7 +176,6 @@ async def dashboard(request: Request) -> HTMLResponse:
             "notifications": cfg.notifications,
             "now": time.time(),
             "keys": keys,
-            "hosts": _list_hosts(),
             "config_dir": str(CONFIG_DIR),
         },
     )
@@ -210,10 +186,62 @@ async def dashboard(request: Request) -> HTMLResponse:
 # ------------------------------------------------------------------
 
 
+@app.get("/version")
+async def version_simple() -> dict:  # type: ignore[type-arg]
+    """Quick version check for deployment verification."""
+    return {"version": _VERSION}
+
+
 @app.get("/api/version")
 async def api_version() -> dict:  # type: ignore[type-arg]
-    """Return the running daemon version."""
-    return {"version": _VERSION}
+    """Return the running daemon version and deployment info."""
+    import subprocess as _sp
+    import time as _time
+    from pathlib import Path as _Path
+
+    result = {
+        "version": _VERSION,
+        "timestamp": _time.time(),
+    }
+
+    # Get git commit hash if available
+    try:
+        repo_root = _Path(__file__).parent.parent.parent
+        commit = _sp.check_output(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            stderr=_sp.DEVNULL,
+            text=True,
+        ).strip()[:8]
+        result["commit"] = commit
+    except Exception:
+        pass
+
+    # Get service start time from /proc
+    try:
+        pidfile = _Path.home() / ".config" / "sshfs-keeper" / "daemon.pid"
+        if pidfile.exists():
+            pid = int(pidfile.read_text().strip())
+            proc_stat = _Path(f"/proc/{pid}/stat").read_text().split()
+            # Field 21 (0-indexed) is starttime in jiffies since boot
+            starttime_jiffies = int(proc_stat[21])
+            # Get clock ticks per second to convert
+            import os as _os
+            ticks_per_sec = _os.sysconf("SC_CLK_TCK")
+            # Get boot time by reading /proc/stat
+            boottime_s = 0
+            with open("/proc/stat") as f:
+                for line in f:
+                    if line.startswith("btime"):
+                        boottime_s = int(line.split()[1])
+                        break
+            if boottime_s:
+                start_s = boottime_s + (starttime_jiffies / ticks_per_sec)
+                result["started_at"] = start_s
+                result["uptime_seconds"] = int(_time.time() - start_s)
+    except Exception:
+        pass
+
+    return result
 
 
 @app.get("/metrics", response_class=PlainTextResponse)
@@ -222,61 +250,6 @@ async def prometheus_metrics() -> PlainTextResponse:
     monitor = _get_monitor()
     body = _metrics_module.generate(monitor, _sync_manager)
     return PlainTextResponse(content=body, media_type="text/plain; version=0.0.4")
-
-
-@app.get("/api/logs")
-async def api_logs(lines: int = 300) -> JSONResponse:
-    """Return the most recent *lines* log lines from journalctl or the log file."""
-    cfg = _get_config()
-    if cfg.daemon.log_file:
-        try:
-            with open(cfg.daemon.log_file) as fh:
-                all_lines = fh.readlines()
-            return JSONResponse({"lines": [l.rstrip() for l in all_lines[-lines:]]})
-        except OSError:
-            pass
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "journalctl", "--user", "-u", "sshfs-keeper",
-            f"-n", str(lines), "--no-pager", "-o", "short-iso",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-        return JSONResponse({"lines": stdout.decode(errors="replace").splitlines()})
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@app.get("/api/logs/stream")
-async def api_logs_stream(request: Request) -> StreamingResponse:
-    """SSE live tail of sshfs-keeper logs via ``journalctl -f``."""
-    async def _generate() -> AsyncGenerator[str, None]:
-        proc = await asyncio.create_subprocess_exec(
-            "journalctl", "--user", "-u", "sshfs-keeper",
-            "-f", "-n", "0", "--no-pager", "-o", "short-iso",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-        try:
-            assert proc.stdout is not None
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    raw = await asyncio.wait_for(proc.stdout.readline(), timeout=30)
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-                    continue
-                if not raw:
-                    break
-                line = raw.decode(errors="replace").rstrip()
-                yield f"data: {json.dumps(line)}\n\n"
-        finally:
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-
-    return StreamingResponse(_generate(), media_type="text/event-stream")
 
 
 @app.get("/api/events")
@@ -627,22 +600,6 @@ def _list_keys() -> list[str]:
     return sorted(p.name for p in KEYS_DIR.iterdir() if p.is_file() and not p.name.endswith(".pub"))
 
 
-def _list_hosts() -> list[dict]:
-    """Return unique user@host entries derived from mount remotes, ordered by name."""
-    import re
-    cfg = _get_config()
-    seen: dict[str, dict] = {}
-    for m in cfg.mounts:
-        # remote is either "user@host:/path" or "host:/path"
-        match = re.match(r'^([^/]+):', m.remote)
-        if not match:
-            continue
-        userhost = match.group(1)  # e.g. "miro@192.168.1.10"
-        if userhost not in seen:
-            seen[userhost] = {"userhost": userhost, "name": m.name, "identity": m.identity or ""}
-    return sorted(seen.values(), key=lambda h: h["userhost"])
-
-
 @app.get("/api/keys")
 async def api_list_keys() -> dict:  # type: ignore[type-arg]
     return {"keys": _list_keys()}
@@ -809,193 +766,3 @@ async def api_disable_sync(name: str, request: Request) -> dict:  # type: ignore
     state.config.enabled = False
     _get_config().save()
     return {"name": name, "enabled": False}
-
-
-# ------------------------------------------------------------------
-# File browser
-# ------------------------------------------------------------------
-
-
-@app.get("/api/browse")
-async def api_browse(
-    path: str = "/",
-    host: str = "",
-    identity: str = "",
-) -> JSONResponse:
-    """List directory contents for the file-picker modal.
-
-    Without *host* lists the local filesystem.
-    With *host* (user@hostname) lists via ``ssh host ls``.
-    Returns ``{"path": str, "entries": [{"name", "is_dir", "size"}]}``.
-    """
-    if host:
-        cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes",
-               "-o", "ConnectTimeout=8"]
-        if identity:
-            cmd += ["-i", identity]
-        cmd += [host, f"ls -1ap -- {path!r}"]
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=12)
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="SSH ls timed out")
-        except FileNotFoundError:
-            raise HTTPException(status_code=500, detail="ssh not found")
-        if proc.returncode != 0:
-            raise HTTPException(status_code=502,
-                                detail=stderr.decode(errors="replace").strip() or "SSH error")
-        lines = stdout.decode(errors="replace").splitlines()
-        entries = []
-        for line in lines:
-            if not line or line in ("./", "../"):
-                continue
-            is_dir = line.endswith("/")
-            entries.append({"name": line.rstrip("/"), "is_dir": is_dir, "size": None})
-    else:
-        import os as _os
-        try:
-            names = _os.listdir(path)
-        except PermissionError:
-            raise HTTPException(status_code=403, detail="Permission denied")
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="Path not found")
-        entries = []
-        for name in sorted(names):
-            full = _os.path.join(path, name)
-            try:
-                is_dir = _os.path.isdir(full)
-                size = None if is_dir else _os.path.getsize(full)
-            except OSError:
-                is_dir = False
-                size = None
-            entries.append({"name": name, "is_dir": is_dir, "size": size})
-
-    # Sort: dirs first, then files, both alphabetical
-    entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
-    # Normalise path
-    import posixpath
-    norm = posixpath.normpath(path) or "/"
-    return JSONResponse({"path": norm, "entries": entries})
-
-
-# ------------------------------------------------------------------
-# Transfers
-# ------------------------------------------------------------------
-
-
-@app.get("/fragments/transfers", response_class=HTMLResponse)
-async def fragment_transfers(request: Request) -> HTMLResponse:
-    """Return the transfers table rows HTML for HTMX polling."""
-    tm = _get_transfer_manager()
-    return templates.TemplateResponse(
-        request,
-        "_transfer_rows.html",
-        {"transfers": tm.get_snapshot()},
-    )
-
-
-@app.get("/api/transfers")
-async def api_list_transfers() -> dict:  # type: ignore[type-arg]
-    """Return all transfer records (newest first)."""
-    return {"transfers": _get_transfer_manager().get_snapshot()}
-
-
-@app.post("/api/transfers")
-async def api_start_transfer(payload: TransferPayload, request: Request) -> JSONResponse:
-    """Start a one-shot file transfer.
-
-    Args:
-        payload: Transfer parameters.
-
-    Returns:
-        JSON with ``id`` of the new transfer and an ``HX-Trigger`` toast header.
-    """
-    _check_api_key(request)
-    tm = _get_transfer_manager()
-    valid = {"rsync_ssh", "scp", "rclone", "local"}
-    if payload.protocol not in valid:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid protocol '{payload.protocol}'. Choose from: {', '.join(sorted(valid))}",
-        )
-    req = TransferRequest(
-        protocol=payload.protocol,
-        source=payload.source,
-        dest=payload.dest,
-        move=payload.move,
-        identity=payload.identity or None,
-        options=payload.options,
-    )
-    tid = await tm.start(req)
-    label = "move" if payload.move else "copy"
-    return _htmx_json({"id": tid, "started": True}, toast=f"Transfer {tid} started ({label}) ✔")
-
-
-@app.get("/api/transfers/{tid}/log")
-async def api_transfer_log(tid: str, request: Request) -> Any:
-    """Return captured output for transfer *tid*.
-
-    Returns HTML when called from HTMX, JSON otherwise.
-
-    Args:
-        tid: Transfer ID.
-    """
-    tm = _get_transfer_manager()
-    lines = tm.get_output(tid)
-    if lines is None:
-        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found")
-    if request.headers.get("HX-Request"):
-        content = "\n".join(lines) if lines else "(no output yet)"
-        return HTMLResponse(content)
-    return {"id": tid, "lines": lines}
-
-
-@app.delete("/api/transfers/{tid}")
-async def api_cancel_transfer(tid: str, request: Request) -> JSONResponse:
-    """Cancel a running transfer.
-
-    Args:
-        tid: Transfer ID.
-    """
-    _check_api_key(request)
-    tm = _get_transfer_manager()
-    ok = await tm.cancel(tid)
-    if not ok:
-        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found or already finished")
-    return _htmx_json({"id": tid, "cancelled": True}, toast=f"Transfer {tid} cancelled")
-
-
-@app.post("/api/transfers/{tid}/resume")
-async def api_resume_transfer(tid: str, request: Request) -> JSONResponse:
-    """Re-run a finished/failed/cancelled transfer, adding --partial for rsync protocols.
-
-    Args:
-        tid: Transfer ID of the transfer to resume.
-    """
-    _check_api_key(request)
-    tm = _get_transfer_manager()
-    state = tm._transfers.get(tid)
-    if state is None:
-        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found")
-    if state.status.value in ("pending", "running"):
-        raise HTTPException(status_code=409, detail="Transfer is still running")
-    req = state.request
-    # For rsync-based protocols inject --partial --append-verify for resume
-    extra = req.options
-    if req.protocol in ("rsync_ssh", "local"):
-        flags = "--partial --append-verify"
-        extra = f"{flags} {extra}".strip() if extra else flags
-    new_req = TransferRequest(
-        protocol=req.protocol,
-        source=req.source,
-        dest=req.dest,
-        move=req.move,
-        identity=req.identity,
-        options=extra,
-    )
-    new_tid = await tm.start(new_req)
-    return _htmx_json({"id": new_tid, "resumed_from": tid}, toast=f"Resumed as {new_tid}")
