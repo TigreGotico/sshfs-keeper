@@ -31,12 +31,13 @@ class SyncStatus(str, Enum):
 class SyncConfig:
     name: str
     source: str          # local path or user@host:/path
-    target: str          # local path or user@host:/path
+    target: str          # local path or user@host:/path (primary target)
     interval: int = 3600 # seconds between runs
     options: str = "-az --delete --stats"
     identity: Optional[str] = None
     enabled: bool = True
     sync_tool: str = "rsync"  # "rsync" | "lsyncd"
+    targets: list[str] = field(default_factory=list)  # additional targets to sync to
 
 
 _MAX_OUTPUT_LINES = 50
@@ -322,120 +323,165 @@ class SyncManager:
             cfg = state.config
             state.status = SyncStatus.RUNNING
             start = time.time()
-            log.info("[sync:%s] starting %s → %s", cfg.name, cfg.source, cfg.target)
 
-            if cfg.sync_tool == "lsyncd":
-                cmd, _tmp = _build_lsyncd_cmd(cfg)
-            elif cfg.sync_tool == "rclone":
-                cmd, _tmp = _build_rclone_sync_cmd(cfg), None
-            else:
-                cmd, _tmp = _build_rsync_cmd(cfg), None
+            # Collect all targets: primary target + additional targets
+            all_targets = [cfg.target]
+            if cfg.targets:
+                all_targets.extend(cfg.targets)
 
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+            total_bytes_sent = 0
+            total_files_xfr = 0
+            failed_targets = []
+
+            # Sync to each target sequentially
+            for target_idx, target in enumerate(all_targets):
+                if target_idx == 0:
+                    log.info("[sync:%s] starting %s → %s", cfg.name, cfg.source, target)
+                else:
+                    log.info("[sync:%s] syncing to target %d/%d: → %s", cfg.name, target_idx + 1, len(all_targets), target)
+
+                # Create a temporary config with this target
+                target_cfg = SyncConfig(
+                    name=cfg.name,
+                    source=cfg.source,
+                    target=target,
+                    interval=cfg.interval,
+                    options=cfg.options,
+                    identity=cfg.identity,
+                    enabled=cfg.enabled,
+                    sync_tool=cfg.sync_tool,
                 )
-                state.started_at = start
-                state.last_progress = ""
-                state.progress_pct = None
-                state.last_output = []
-                stdout_lines: list[str] = []
-                stderr_lines: list[str] = []
 
-                async def _drain(stream: asyncio.StreamReader, dest: list[str]) -> None:
-                    """Read stream chunks, split on \\n and \\r, update progress live."""
-                    buf = b""
-                    while True:
-                        chunk = await stream.read(4096)
-                        if not chunk:
-                            break
-                        buf += chunk
-                        while b"\n" in buf or b"\r" in buf:
-                            idx_n = buf.find(b"\n")
-                            idx_r = buf.find(b"\r")
-                            if idx_n == -1:
-                                idx = idx_r
-                            elif idx_r == -1:
-                                idx = idx_n
-                            else:
-                                idx = min(idx_n, idx_r)
-                            line = buf[:idx].decode(errors="replace").strip()
-                            buf = buf[idx + 1:]
-                            if not line:
-                                continue
-                            dest.append(line)
-                            state.last_output.append(line)
-                            if len(state.last_output) > _MAX_OUTPUT_LINES:
-                                state.last_output.pop(0)
-                            if "%" in line or "xfr#" in line or "Transferred" in line:
-                                state.last_progress = line
-                                pct_m = re.search(r"(\d+)%", line)
-                                if pct_m:
-                                    state.progress_pct = int(pct_m.group(1))
-                    if buf.strip():
-                        line = buf.decode(errors="replace").strip()
+                result = await self._sync_single_target(state, target_cfg, start, target_idx, len(all_targets))
+                if result:
+                    bytes_sent, files_xfr = result
+                    total_bytes_sent += bytes_sent
+                    total_files_xfr += files_xfr
+                else:
+                    failed_targets.append(target)
+
+            # Set final state
+            if failed_targets:
+                state.status = SyncStatus.FAILED
+                state.last_error = f"Failed syncing to {len(failed_targets)}/{len(all_targets)} target(s)"
+                state.fail_count += 1
+                log.warning("[sync:%s] failed on targets: %s", cfg.name, ", ".join(failed_targets))
+            else:
+                state.status = SyncStatus.OK
+                state.last_error = None
+                state.fail_count = 0
+                log.info("[sync:%s] done syncing to %d target(s) — %d file(s) — %d MB", cfg.name, len(all_targets), total_files_xfr, total_bytes_sent // 1048576)
+
+            state.bytes_sent = total_bytes_sent
+            state.files_transferred = total_files_xfr
+            state.last_run = start
+            state.last_duration = time.time() - start
+            state.run_count += 1
+
+    async def _sync_single_target(self, state: SyncState, target_cfg: "SyncConfig", start: float, idx: int, total: int) -> tuple[int, int] | None:  # type: ignore[name-defined]
+        """Sync to a single target. Returns (bytes_sent, files_transferred) or None on failure."""
+        _tmp = None
+
+        try:
+            if target_cfg.sync_tool == "lsyncd":
+                cmd, _tmp = _build_lsyncd_cmd(target_cfg)
+            elif target_cfg.sync_tool == "rclone":
+                cmd, _tmp = _build_rclone_sync_cmd(target_cfg), None
+            else:
+                cmd, _tmp = _build_rsync_cmd(target_cfg), None
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            if idx == 0:
+                state.started_at = start
+            state.last_progress = ""
+            state.progress_pct = None
+            state.last_output = []
+            stdout_lines: list[str] = []
+            stderr_lines: list[str] = []
+
+            async def _drain(stream: asyncio.StreamReader, dest: list[str]) -> None:
+                """Read stream chunks, split on \\n and \\r, update progress live."""
+                buf = b""
+                while True:
+                    chunk = await stream.read(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while b"\n" in buf or b"\r" in buf:
+                        idx_n = buf.find(b"\n")
+                        idx_r = buf.find(b"\r")
+                        if idx_n == -1:
+                            idx_pos = idx_r
+                        elif idx_r == -1:
+                            idx_pos = idx_n
+                        else:
+                            idx_pos = min(idx_n, idx_r)
+                        line = buf[:idx_pos].decode(errors="replace").strip()
+                        buf = buf[idx_pos + 1:]
+                        if not line:
+                            continue
                         dest.append(line)
                         state.last_output.append(line)
                         if len(state.last_output) > _MAX_OUTPUT_LINES:
                             state.last_output.pop(0)
+                        if "%" in line or "xfr#" in line or "Transferred" in line:
+                            state.last_progress = line
+                            pct_m = re.search(r"(\d+)%", line)
+                            if pct_m:
+                                state.progress_pct = int(pct_m.group(1))
+                if buf.strip():
+                    line = buf.decode(errors="replace").strip()
+                    dest.append(line)
+                    state.last_output.append(line)
+                    if len(state.last_output) > _MAX_OUTPUT_LINES:
+                        state.last_output.pop(0)
 
-                assert proc.stdout is not None
-                assert proc.stderr is not None
-                await asyncio.wait_for(
-                    asyncio.gather(_drain(proc.stdout, stdout_lines), _drain(proc.stderr, stderr_lines)),
-                    timeout=3600,
-                )
-                await proc.wait()
-                duration = time.time() - start
+            assert proc.stdout is not None
+            assert proc.stderr is not None
+            await asyncio.wait_for(
+                asyncio.gather(_drain(proc.stdout, stdout_lines), _drain(proc.stderr, stderr_lines)),
+                timeout=3600,
+            )
+            await proc.wait()
 
-                if proc.returncode in _SOFT_EXIT_CODES:
-                    combined_stdout = "\n".join(stdout_lines)
-                    parser = _parse_rclone_stats if cfg.sync_tool == "rclone" else _parse_stats
-                    bytes_sent, files_xfr = parser(combined_stdout)
-                    state.status = SyncStatus.OK
-                    state.last_error = None
-                    state.bytes_sent = bytes_sent
-                    state.files_transferred = files_xfr
-                    state.fail_count = 0
-                    log.info("[sync:%s] done in %.1fs — %s file(s)", cfg.name, duration, files_xfr)
-                else:
-                    last_err = stderr_lines[-1] if stderr_lines else f"exit {proc.returncode}"
-                    state.status = SyncStatus.FAILED
-                    state.last_error = last_err
-                    state.fail_count += 1
-                    log.warning("[sync:%s] failed (exit %d): %s", cfg.name, proc.returncode, state.last_error)
+            if proc.returncode in _SOFT_EXIT_CODES:
+                combined_stdout = "\n".join(stdout_lines)
+                parser = _parse_rclone_stats if target_cfg.sync_tool == "rclone" else _parse_stats
+                bytes_sent, files_xfr = parser(combined_stdout)
+                log.info("[sync:%s] target %d/%d done — %s file(s)", target_cfg.name, idx + 1, total, files_xfr or 0)
+                return (bytes_sent or 0, files_xfr or 0)
+            else:
+                last_err = stderr_lines[-1] if stderr_lines else f"exit {proc.returncode}"
+                log.warning("[sync:%s] target %d/%d failed (exit %d): %s", target_cfg.name, idx + 1, total, proc.returncode, last_err)
+                return None
 
-                state.last_run = start
-                state.last_duration = duration
-                state.run_count += 1
-
-            except asyncio.TimeoutError:
-                state.status = SyncStatus.FAILED
-                state.last_error = "Timed out after 1h"
-                state.fail_count += 1
-                log.warning("[sync:%s] timed out", cfg.name)
-            except Exception as exc:
-                state.status = SyncStatus.FAILED
-                state.last_error = str(exc)
-                state.fail_count += 1
-                log.warning("[sync:%s] error: %s", cfg.name, exc)
-            finally:
+        except asyncio.TimeoutError:
+            log.warning("[sync:%s] target %d/%d timed out after 1h", target_cfg.name, idx + 1, total)
+            return None
+        except Exception as exc:
+            log.warning("[sync:%s] target %d/%d error: %s", target_cfg.name, idx + 1, total, exc)
+            return None
+        finally:
+            # Clean up lsyncd temp config file
+            if _tmp:
+                import os as _os
+                try:
+                    _os.unlink(_tmp)
+                except OSError:
+                    pass
+            if idx == total - 1:
                 state.started_at = None
-                # Clean up lsyncd temp config file
-                if _tmp:
-                    import os as _os
-                    try:
-                        _os.unlink(_tmp)
-                    except OSError:
-                        pass
+                # Set next run after all targets complete
                 if state.status == SyncStatus.FAILED and state.fail_count >= self._max_retries:
                     backoff = self._backoff_base * (2 ** (state.fail_count - self._max_retries))
                     state._next_run = time.time() + backoff
                     log.info(
                         "[sync:%s] backoff — retry in %ds (fail_count=%d)",
-                        cfg.name, backoff, state.fail_count,
+                        target_cfg.name, backoff, state.fail_count,
                     )
                 else:
-                    state._next_run = time.time() + cfg.interval
+                    state._next_run = time.time() + target_cfg.interval

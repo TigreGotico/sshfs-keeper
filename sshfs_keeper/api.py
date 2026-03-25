@@ -138,6 +138,7 @@ class SyncPayload(BaseModel):
     identity: Optional[str] = None
     enabled: bool = True
     sync_tool: str = "rsync"
+    targets: list[str] = []  # additional targets to sync to
 
 
 class DaemonSettingsPayload(BaseModel):
@@ -661,7 +662,7 @@ async def api_add_sync(payload: SyncPayload, request: Request) -> dict:  # type:
         name=payload.name, source=payload.source, target=payload.target,
         interval=payload.interval, options=payload.options,
         identity=payload.identity or None, enabled=payload.enabled,
-        sync_tool=payload.sync_tool,
+        sync_tool=payload.sync_tool, targets=payload.targets or [],
     )
     cfg.syncs.append(sc)
     sm.states[sc.name] = SyncState(config=sc)
@@ -685,6 +686,7 @@ async def api_update_sync(name: str, payload: SyncPayload, request: Request) -> 
     sc.identity = payload.identity or None
     sc.enabled = payload.enabled
     sc.sync_tool = payload.sync_tool
+    sc.targets = payload.targets or []
     if payload.name != name:
         if payload.name in sm.states:
             raise HTTPException(status_code=409, detail=f"Sync '{payload.name}' already exists")
