@@ -416,30 +416,37 @@
         </div>
       </div>
 
-      {% if hosts %}
-      <div>
-        <label>Quick-fill host <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <select id="tr-host-select" onchange="applyTransferHost()">
-          <option value="">— type source/dest manually —</option>
-          {% for h in hosts %}
-          <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
-          {% endfor %}
-        </select>
-        <span class="hint">Selects a host from your mounts and prefills the source field.</span>
-      </div>
-      {% endif %}
-
       <div>
         <label>Source</label>
-        <input type="text" name="source" id="tr-source"
-               placeholder="user@host:/path/to/source" autocomplete="off" required>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <input type="text" name="source" id="tr-source"
+                 placeholder="user@host:/path/to/source" autocomplete="off" required style="flex:1;min-width:0">
+          {% if hosts %}
+          <select id="tr-src-host" onchange="applyTransferHost('src')" style="flex:0 0 auto;max-width:220px">
+            <option value="">host…</option>
+            {% for h in hosts %}
+            <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+        </div>
         <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
       </div>
 
       <div>
         <label>Destination</label>
-        <input type="text" name="dest" id="tr-dest"
-               placeholder="/mnt/backup/photos" autocomplete="off" required>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <input type="text" name="dest" id="tr-dest"
+                 placeholder="/mnt/backup/photos" autocomplete="off" required style="flex:1;min-width:0">
+          {% if hosts %}
+          <select id="tr-dst-host" onchange="applyTransferHost('dst')" style="flex:0 0 auto;max-width:220px">
+            <option value="">host…</option>
+            {% for h in hosts %}
+            <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+        </div>
         <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
       </div>
 
@@ -1040,24 +1047,24 @@
   }
   applyTransferProtocol();
 
-  function applyTransferHost() {
-    const sel = document.getElementById('tr-host-select');
-    if (!sel) return;
-    const userhost = sel.value;
-    if (!userhost) return;
-    const srcEl = document.getElementById('tr-source');
-    // Prefill source with userhost:/ so user just appends the path
-    srcEl.value = userhost + ':/';
-    srcEl.focus();
-    // Move cursor to end
-    const len = srcEl.value.length;
-    srcEl.setSelectionRange(len, len);
-    // Auto-select matching identity key if available
-    const identity = sel.selectedOptions[0]?.dataset?.identity || '';
-    const identEl = document.getElementById('tr-identity');
-    if (identEl && identity) {
-      for (const opt of identEl.options) {
-        if (opt.value === identity) { opt.selected = true; break; }
+  function applyTransferHost(which) {
+    const selId = which === 'dst' ? 'tr-dst-host' : 'tr-src-host';
+    const fieldId = which === 'dst' ? 'tr-dest' : 'tr-source';
+    const sel = document.getElementById(selId);
+    if (!sel || !sel.value) return;
+    const el = document.getElementById(fieldId);
+    el.value = sel.value + ':/';
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+    // Auto-select identity key from source host selection
+    if (which === 'src') {
+      const identity = sel.selectedOptions[0]?.dataset?.identity || '';
+      const identEl = document.getElementById('tr-identity');
+      if (identEl && identity) {
+        for (const opt of identEl.options) {
+          if (opt.value === identity) { opt.selected = true; break; }
+        }
       }
     }
   }
@@ -1068,8 +1075,10 @@
       document.getElementById('tr-dest').value = '';
       document.getElementById('tr-copy').checked = true;
       document.getElementById('tr-move').value = 'false';
-      const hostSel = document.getElementById('tr-host-select');
-      if (hostSel) hostSel.selectedIndex = 0;
+      const s = document.getElementById('tr-src-host');
+      const d = document.getElementById('tr-dst-host');
+      if (s) s.selectedIndex = 0;
+      if (d) d.selectedIndex = 0;
       htmx.trigger('#transfers-tbody', 'refresh');
     }
   }
