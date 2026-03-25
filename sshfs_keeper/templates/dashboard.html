@@ -405,10 +405,10 @@
           <label>Mode</label>
           <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="move" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value=false"> Copy
+              <input type="radio" name="_move_ui" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value='false'"> Copy
             </label>
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="move" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value=true"> Move
+              <input type="radio" name="_move_ui" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value='true'"> Move
             </label>
           </div>
           <span class="hint">Move deletes source files after transfer</span>
