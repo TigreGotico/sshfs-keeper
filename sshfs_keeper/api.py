@@ -757,6 +757,77 @@ async def api_disable_sync(name: str, request: Request) -> dict:  # type: ignore
 
 
 # ------------------------------------------------------------------
+# File browser
+# ------------------------------------------------------------------
+
+
+@app.get("/api/browse")
+async def api_browse(
+    path: str = "/",
+    host: str = "",
+    identity: str = "",
+) -> JSONResponse:
+    """List directory contents for the file-picker modal.
+
+    Without *host* lists the local filesystem.
+    With *host* (user@hostname) lists via ``ssh host ls``.
+    Returns ``{"path": str, "entries": [{"name", "is_dir", "size"}]}``.
+    """
+    if host:
+        cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes",
+               "-o", "ConnectTimeout=8"]
+        if identity:
+            cmd += ["-i", identity]
+        cmd += [host, f"ls -1ap -- {path!r}"]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=12)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="SSH ls timed out")
+        except FileNotFoundError:
+            raise HTTPException(status_code=500, detail="ssh not found")
+        if proc.returncode != 0:
+            raise HTTPException(status_code=502,
+                                detail=stderr.decode(errors="replace").strip() or "SSH error")
+        lines = stdout.decode(errors="replace").splitlines()
+        entries = []
+        for line in lines:
+            if not line or line in ("./", "../"):
+                continue
+            is_dir = line.endswith("/")
+            entries.append({"name": line.rstrip("/"), "is_dir": is_dir, "size": None})
+    else:
+        import os as _os
+        try:
+            names = _os.listdir(path)
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Permission denied")
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Path not found")
+        entries = []
+        for name in sorted(names):
+            full = _os.path.join(path, name)
+            try:
+                is_dir = _os.path.isdir(full)
+                size = None if is_dir else _os.path.getsize(full)
+            except OSError:
+                is_dir = False
+                size = None
+            entries.append({"name": name, "is_dir": is_dir, "size": size})
+
+    # Sort: dirs first, then files, both alphabetical
+    entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+    # Normalise path
+    import posixpath
+    norm = posixpath.normpath(path) or "/"
+    return JSONResponse({"path": norm, "entries": entries})
+
+
+# ------------------------------------------------------------------
 # Transfers
 # ------------------------------------------------------------------
 

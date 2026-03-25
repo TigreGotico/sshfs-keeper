@@ -422,13 +422,14 @@
           <input type="text" name="source" id="tr-source"
                  placeholder="user@host:/path/to/source" autocomplete="off" required style="flex:1;min-width:0">
           {% if hosts %}
-          <select id="tr-src-host" onchange="applyTransferHost('src')" style="flex:0 0 auto;max-width:220px">
+          <select id="tr-src-host" onchange="applyTransferHost('src')" style="flex:0 0 auto;max-width:200px">
             <option value="">host…</option>
             {% for h in hosts %}
             <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
             {% endfor %}
           </select>
           {% endif %}
+          <button type="button" class="btn" style="flex:0 0 auto;white-space:nowrap" onclick="openFilePicker('src')">📂 Browse</button>
         </div>
         <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
       </div>
@@ -439,13 +440,14 @@
           <input type="text" name="dest" id="tr-dest"
                  placeholder="/mnt/backup/photos" autocomplete="off" required style="flex:1;min-width:0">
           {% if hosts %}
-          <select id="tr-dst-host" onchange="applyTransferHost('dst')" style="flex:0 0 auto;max-width:220px">
+          <select id="tr-dst-host" onchange="applyTransferHost('dst')" style="flex:0 0 auto;max-width:200px">
             <option value="">host…</option>
             {% for h in hosts %}
             <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
             {% endfor %}
           </select>
           {% endif %}
+          <button type="button" class="btn" style="flex:0 0 auto;white-space:nowrap" onclick="openFilePicker('dst')">📂 Browse</button>
         </div>
         <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
       </div>
@@ -792,13 +794,32 @@
   </div>
 </div>
 
+<!-- ===== FILE PICKER MODAL ===== -->
+<div class="overlay" id="filepicker-overlay" onclick="if(event.target===this)closeFilePicker()">
+  <div class="modal" style="width:min(680px,95vw);max-height:80vh;display:flex;flex-direction:column">
+    <h2 style="margin-bottom:0.3rem">Browse</h2>
+    <div id="fp-breadcrumb" style="font-size:0.78rem;color:var(--dimmed);margin-bottom:0.7rem;word-break:break-all"></div>
+    <div id="fp-error" style="display:none;color:var(--b-error-fg);font-size:0.82rem;margin-bottom:0.5rem"></div>
+    <div id="fp-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:6px;min-height:200px">
+      <div style="padding:2rem;text-align:center;color:var(--dimmed)">Loading…</div>
+    </div>
+    <div style="margin-top:0.7rem;display:flex;gap:0.5rem;align-items:center">
+      <input id="fp-current-path" type="text" style="flex:1;font-family:monospace;font-size:0.82rem" readonly>
+      <button class="btn btn-primary" onclick="confirmFilePicker()">Select</button>
+      <button class="btn btn-muted" onclick="closeFilePicker()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
   // ---- tabs (minimal JS — CSS only alternative would need :target anchors) ----
   function switchTab(name) {
-    const panels = ['mounts','syncs','keys','settings','notifications'];
-    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', panels[i] === name));
+    document.querySelectorAll('.tab').forEach(t => {
+      const target = t.getAttribute('onclick').match(/switchTab\('(\w+)'\)/)?.[1];
+      t.classList.toggle('active', target === name);
+    });
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   }
 
@@ -1094,6 +1115,115 @@
       .then(r => r.json())
       .then(d => { output.textContent = (d.lines || []).join('\n') || '(no output yet)'; })
       .catch(() => { output.textContent = 'Failed to load output.'; });
+  }
+
+  // ---- file picker ----
+  let _fp_target = 'src';   // 'src' or 'dst'
+  let _fp_path = '/';
+  let _fp_host = '';
+  let _fp_identity = '';
+
+  function openFilePicker(which) {
+    _fp_target = which;
+    // Determine host + identity from the matching host dropdown or current field value
+    const hostSel = document.getElementById(which === 'src' ? 'tr-src-host' : 'tr-dst-host');
+    _fp_host = hostSel ? hostSel.value : '';
+    _fp_identity = hostSel?.selectedOptions[0]?.dataset?.identity || '';
+    // Start at current field value path if it looks like an absolute path
+    const fieldVal = document.getElementById(which === 'src' ? 'tr-source' : 'tr-dest').value;
+    const colonIdx = fieldVal.indexOf(':/');
+    const rawPath = colonIdx >= 0 ? fieldVal.slice(colonIdx + 1) : fieldVal;
+    _fp_path = (rawPath.startsWith('/') ? rawPath : '/');
+    document.getElementById('filepicker-overlay').classList.add('open');
+    fpLoad(_fp_path);
+  }
+
+  function closeFilePicker() {
+    document.getElementById('filepicker-overlay').classList.remove('open');
+  }
+
+  function confirmFilePicker() {
+    const path = document.getElementById('fp-current-path').value;
+    const fieldId = _fp_target === 'src' ? 'tr-source' : 'tr-dest';
+    document.getElementById(fieldId).value = _fp_host ? `${_fp_host}:${path}` : path;
+    closeFilePicker();
+  }
+
+  function fpLoad(path) {
+    document.getElementById('fp-error').style.display = 'none';
+    document.getElementById('fp-list').innerHTML = '<div style="padding:2rem;text-align:center;color:var(--dimmed)">Loading…</div>';
+    _fp_path = path;
+    document.getElementById('fp-current-path').value = path;
+    fpRenderBreadcrumb(path);
+    const params = new URLSearchParams({path});
+    if (_fp_host) params.set('host', _fp_host);
+    if (_fp_identity) params.set('identity', _fp_identity);
+    fetch('/api/browse?' + params)
+      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.detail || 'Error')))
+      .then(data => fpRenderList(data.path, data.entries))
+      .catch(err => {
+        document.getElementById('fp-error').textContent = String(err);
+        document.getElementById('fp-error').style.display = '';
+        document.getElementById('fp-list').innerHTML = '';
+      });
+  }
+
+  function fpRenderBreadcrumb(path) {
+    const parts = path.split('/').filter(Boolean);
+    const prefix = _fp_host ? `${_fp_host}:` : '';
+    let html = `<span style="cursor:pointer;color:var(--accent)" onclick="fpLoad('/')">${prefix}/</span>`;
+    let acc = '';
+    parts.forEach((p, i) => {
+      acc += '/' + p;
+      const cur = acc;
+      if (i < parts.length - 1) {
+        html += ` <span style="color:var(--border)">›</span> <span style="cursor:pointer;color:var(--accent)" onclick="fpLoad('${cur}')">${p}</span>`;
+      } else {
+        html += ` <span style="color:var(--border)">›</span> <strong>${p}</strong>`;
+      }
+    });
+    document.getElementById('fp-breadcrumb').innerHTML = html;
+  }
+
+  function fpRenderList(path, entries) {
+    _fp_path = path;
+    document.getElementById('fp-current-path').value = path;
+    fpRenderBreadcrumb(path);
+    if (!entries.length) {
+      document.getElementById('fp-list').innerHTML = '<div style="padding:2rem;text-align:center;color:var(--dimmed)">(empty directory)</div>';
+      return;
+    }
+    const rows = entries.map(e => {
+      const icon = e.is_dir ? '📁' : '📄';
+      const size = e.size != null ? `<span style="color:var(--dimmed);font-size:0.72rem;margin-left:auto">${fpFmtSize(e.size)}</span>` : '';
+      const click = e.is_dir
+        ? `onclick="fpLoad('${(path + '/' + e.name).replace('//', '/')}')" style="cursor:pointer"`
+        : `onclick="fpSelect('${(path + '/' + e.name).replace('//', '/')}')" style="cursor:pointer"`;
+      return `<div ${click} style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);font-size:0.83rem;transition:background 0.1s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+        <span>${icon}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name}${e.is_dir ? '/' : ''}</span>${size}
+      </div>`;
+    });
+    // Back entry
+    if (path !== '/') {
+      const parent = path.split('/').slice(0, -1).join('/') || '/';
+      rows.unshift(`<div onclick="fpLoad('${parent}')" style="cursor:pointer;display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);font-size:0.83rem;color:var(--dimmed)" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+        <span>⬆️</span><span>.. (up)</span>
+      </div>`);
+    }
+    document.getElementById('fp-list').innerHTML = rows.join('');
+  }
+
+  function fpSelect(path) {
+    document.getElementById('fp-current-path').value = path;
+    _fp_path = path;
+    fpRenderBreadcrumb(path);
+  }
+
+  function fpFmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes/1048576).toFixed(1) + ' MB';
+    return (bytes/1073741824).toFixed(1) + ' GB';
   }
 </script>
 </body>
