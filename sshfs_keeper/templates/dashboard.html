@@ -723,7 +723,7 @@
           <option value="sshfs">sshfs — fast, low overhead, SSH only</option>
           <option value="rclone">rclone — supports FTP, WebDAV, SMB, S3, cloud storage</option>
         </select>
-        <span class="hint" id="m-tool-hint">sshfs is the default for SSH connections. rclone is required for FTP, WebDAV, SMB, and cloud storage. The Protocol selector above sets this automatically.</span>
+        <span class="hint" id="m-tool-hint">sshfs is the default for SSH connections. rclone is required for FTP, WebDAV, SMB, and cloud storage. The Protocol selector above sets this automatically. For unstable networks (WiFi, VPN, internet) prefer rclone even for SSH — a dropped connection freezes a sshfs mount until the kernel times out, while rclone retries each operation independently.</span>
       </div>
       <div class="field">
         <label>Advanced options <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
@@ -909,7 +909,7 @@
       tool: 'sshfs',
       remoteHint: 'Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/media/data</code>. Use the server\'s IP address or hostname.',
       protoHint: 'SSH is the most common choice for Linux servers, NAS devices, and Raspberry Pis. It encrypts your connection automatically and works over your local network or the internet.',
-      toolHint: 'sshfs is the fastest option for SSH connections and requires no extra configuration.',
+      toolHint: 'sshfs is the fastest option for SSH hosts on a <strong>stable LAN or wired connection</strong>. For <strong>WiFi, VPN, or internet links</strong> consider rclone — a dropped connection stalls the entire sshfs mount until the kernel times out, while rclone retries each operation independently.',
     },
     ftp: {
       remote: ':ftp,host=HOST,user=USER,pass=PASS:/path',

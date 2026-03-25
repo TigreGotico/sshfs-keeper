@@ -72,6 +72,18 @@ sshfs-keeper reload
 
 Sends SIGHUP to the running daemon. Adds new mounts, removes deleted ones; preserves runtime state (retry counts, backoff) for existing mounts.
 
+## When should I use sshfs vs rclone for a mount?
+
+**Use sshfs** for SSH hosts on a stable LAN or wired connection. It's lower latency and requires no extra setup — ideal for interactive access, editing files in place, or running local tools against remote data.
+
+**Use rclone** when:
+- The connection is unstable (WiFi, VPN, internet). sshfs holds a single persistent SSH connection — if it drops, the entire mount freezes and any process with an open file handle hangs until the kernel times out. sshfs-keeper will remount, but hung processes still need to be killed. rclone issues each file operation as an independent request, so a blip causes that operation to fail/retry rather than stalling everything.
+- The remote is cloud storage, FTP, WebDAV, or SMB — sshfs only supports SSH.
+- You're on macOS or Windows (sshfs is painful to set up outside Linux).
+- Any mount where a hung process would be painful (database files, build outputs).
+
+**Quick rule:** stable LAN → sshfs. WiFi / VPN / internet / NAS → rclone.
+
 ## How do I use rclone instead of sshfs for a mount?
 
 Set `mount_tool = "rclone"` in the mount config. The `remote` field accepts either SSH format (`user@host:/path`, auto-converted to `:sftp,host=…,user=…:path`) or a pre-configured rclone remote (`myremote:/path`):
