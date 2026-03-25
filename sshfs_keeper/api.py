@@ -199,6 +199,7 @@ async def dashboard(request: Request) -> HTMLResponse:
             "notifications": cfg.notifications,
             "now": time.time(),
             "keys": keys,
+            "hosts": _list_hosts(),
             "config_dir": str(CONFIG_DIR),
         },
     )
@@ -569,6 +570,22 @@ def _list_keys() -> list[str]:
     if not KEYS_DIR.exists():
         return []
     return sorted(p.name for p in KEYS_DIR.iterdir() if p.is_file() and not p.name.endswith(".pub"))
+
+
+def _list_hosts() -> list[dict]:
+    """Return unique user@host entries derived from mount remotes, ordered by name."""
+    import re
+    cfg = _get_config()
+    seen: dict[str, dict] = {}
+    for m in cfg.mounts:
+        # remote is either "user@host:/path" or "host:/path"
+        match = re.match(r'^([^/]+):', m.remote)
+        if not match:
+            continue
+        userhost = match.group(1)  # e.g. "miro@192.168.1.10"
+        if userhost not in seen:
+            seen[userhost] = {"userhost": userhost, "name": m.name, "identity": m.identity or ""}
+    return sorted(seen.values(), key=lambda h: h["userhost"])
 
 
 @app.get("/api/keys")

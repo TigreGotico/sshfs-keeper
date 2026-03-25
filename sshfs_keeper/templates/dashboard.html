@@ -416,6 +416,19 @@
         </div>
       </div>
 
+      {% if hosts %}
+      <div>
+        <label>Quick-fill host <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <select id="tr-host-select" onchange="applyTransferHost()">
+          <option value="">— type source/dest manually —</option>
+          {% for h in hosts %}
+          <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Selects a host from your mounts and prefills the source field.</span>
+      </div>
+      {% endif %}
+
       <div>
         <label>Source</label>
         <input type="text" name="source" id="tr-source"
@@ -1027,12 +1040,36 @@
   }
   applyTransferProtocol();
 
+  function applyTransferHost() {
+    const sel = document.getElementById('tr-host-select');
+    if (!sel) return;
+    const userhost = sel.value;
+    if (!userhost) return;
+    const srcEl = document.getElementById('tr-source');
+    // Prefill source with userhost:/ so user just appends the path
+    srcEl.value = userhost + ':/';
+    srcEl.focus();
+    // Move cursor to end
+    const len = srcEl.value.length;
+    srcEl.setSelectionRange(len, len);
+    // Auto-select matching identity key if available
+    const identity = sel.selectedOptions[0]?.dataset?.identity || '';
+    const identEl = document.getElementById('tr-identity');
+    if (identEl && identity) {
+      for (const opt of identEl.options) {
+        if (opt.value === identity) { opt.selected = true; break; }
+      }
+    }
+  }
+
   function onTransferStarted(event) {
     if (event.detail.successful) {
       document.getElementById('tr-source').value = '';
       document.getElementById('tr-dest').value = '';
       document.getElementById('tr-copy').checked = true;
       document.getElementById('tr-move').value = 'false';
+      const hostSel = document.getElementById('tr-host-select');
+      if (hostSel) hostSel.selectedIndex = 0;
       htmx.trigger('#transfers-tbody', 'refresh');
     }
   }
