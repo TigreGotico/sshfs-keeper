@@ -94,6 +94,29 @@ class AppConfig:
         """Write the current config back to disk as TOML."""
         import traceback as _tb
         if not self.mounts:
+            # Check whether the on-disk config already has mounts; if so,
+            # refuse to overwrite it with an empty list — this prevents a
+            # bug where a transient empty AppConfig wipes a healthy config.
+            _disk_path = self._path
+            if _disk_path is None:
+                for _c in CONFIG_SEARCH_PATHS:
+                    if _c.exists():
+                        _disk_path = _c
+                        break
+            if _disk_path is not None and _disk_path.exists():
+                try:
+                    with open(_disk_path, "rb") as _fh:
+                        _raw = tomllib.load(_fh)
+                    if _raw.get("mount"):
+                        log.error(
+                            "save() called with 0 mounts but on-disk config has %d mounts — "
+                            "refusing to overwrite. Stack:\n%s",
+                            len(_raw["mount"]),
+                            "".join(_tb.format_stack()),
+                        )
+                        return
+                except Exception as _e:
+                    log.warning("save() 0-mount guard: could not read on-disk config: %s", _e)
             log.warning(
                 "save() called with 0 mounts — stack:\n%s",
                 "".join(_tb.format_stack()),
@@ -260,6 +283,30 @@ class AppConfig:
         notifications = NotificationsConfig(**raw.get("notifications", {}))
         mounts = [MountConfig(**m) for m in raw.get("mount", [])]
         syncs = [SyncConfig(**s) for s in raw.get("sync", [])]
+
+        # If the file loaded with 0 mounts, check config.bak for a recovery
+        if not mounts:
+            bak = path.with_suffix(".bak")
+            if bak.exists():
+                try:
+                    with open(bak, "rb") as _fh:
+                        _braw = tomllib.load(_fh)
+                    _bak_mounts = _braw.get("mount", [])
+                    if _bak_mounts:
+                        log.warning(
+                            "Config at %s has 0 mounts but backup has %d mounts — "
+                            "auto-restoring from %s",
+                            path,
+                            len(_bak_mounts),
+                            bak,
+                        )
+                        import shutil as _shutil
+                        _shutil.copy2(bak, path)
+                        mounts = [MountConfig(**m) for m in _bak_mounts]
+                        syncs = syncs or [SyncConfig(**s) for s in _braw.get("sync", [])]
+                except Exception as _e:
+                    log.warning("load() auto-restore from backup failed: %s", _e)
+
         obj = cls(daemon=daemon, api=api, notifications=notifications, mounts=mounts, syncs=syncs)
         obj._path = path
         return obj
