@@ -424,6 +424,7 @@
           {% if hosts %}
           <select id="tr-src-host" onchange="applyTransferHost('src')" style="flex:0 0 auto;max-width:200px">
             <option value="">host…</option>
+            <option value="__local__">📍 local</option>
             {% for h in hosts %}
             <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
             {% endfor %}
@@ -442,6 +443,7 @@
           {% if hosts %}
           <select id="tr-dst-host" onchange="applyTransferHost('dst')" style="flex:0 0 auto;max-width:200px">
             <option value="">host…</option>
+            <option value="__local__">📍 local</option>
             {% for h in hosts %}
             <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
             {% endfor %}
@@ -1074,12 +1076,16 @@
     const sel = document.getElementById(selId);
     if (!sel || !sel.value) return;
     const el = document.getElementById(fieldId);
-    el.value = sel.value + ':/';
+    if (sel.value === '__local__') {
+      el.value = '/';
+    } else {
+      el.value = sel.value + ':/';
+    }
     el.focus();
     const len = el.value.length;
     el.setSelectionRange(len, len);
     // Auto-select identity key from source host selection
-    if (which === 'src') {
+    if (which === 'src' && sel.value !== '__local__') {
       const identity = sel.selectedOptions[0]?.dataset?.identity || '';
       const identEl = document.getElementById('tr-identity');
       if (identEl && identity) {
@@ -1127,8 +1133,9 @@
     _fp_target = which;
     // Determine host + identity from the matching host dropdown or current field value
     const hostSel = document.getElementById(which === 'src' ? 'tr-src-host' : 'tr-dst-host');
-    _fp_host = hostSel ? hostSel.value : '';
-    _fp_identity = hostSel?.selectedOptions[0]?.dataset?.identity || '';
+    const rawHost = hostSel ? hostSel.value : '';
+    _fp_host = (rawHost && rawHost !== '__local__') ? rawHost : '';
+    _fp_identity = _fp_host ? (hostSel?.selectedOptions[0]?.dataset?.identity || '') : '';
     // Start at current field value path if it looks like an absolute path
     const fieldVal = document.getElementById(which === 'src' ? 'tr-source' : 'tr-dest').value;
     const colonIdx = fieldVal.indexOf(':/');
@@ -1170,7 +1177,7 @@
 
   function fpRenderBreadcrumb(path) {
     const parts = path.split('/').filter(Boolean);
-    const prefix = _fp_host ? `${_fp_host}:` : '';
+    const prefix = _fp_host ? `${_fp_host}:` : '📍 local:';
     let html = `<span style="cursor:pointer;color:var(--accent)" onclick="fpLoad('/')">${prefix}/</span>`;
     let acc = '';
     parts.forEach((p, i) => {
