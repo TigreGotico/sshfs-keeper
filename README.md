@@ -50,7 +50,9 @@ sshfs-keeper install-service  # write systemd/launchd/NSSM service file
 
 ## Web UI
 
-_Web UI screenshot — open http://localhost:8765 after starting the daemon._
+<img width="1159" height="837" alt="image" src="https://github.com/user-attachments/assets/e6b7bf49-5578-4e9a-a767-3b188c9a8db9" />
+
+> open http://localhost:8765 after starting the daemon.
 
 ## Docs
 
