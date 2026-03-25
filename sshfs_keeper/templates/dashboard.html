@@ -594,6 +594,12 @@
         <span class="hint">Where the copies end up. Can be a local folder or a remote path like <code>user@server:/backup/</code>.</span>
       </div>
       <div class="field">
+        <label>Additional destinations <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <div id="s-targets-list" style="display:flex;flex-direction:column;gap:0.5rem"></div>
+        <button type="button" onclick="addTargetField()" style="margin-top:0.5rem;align-self:flex-start" class="btn btn-small">+ Add another destination</button>
+        <span class="hint">Sync to multiple backup locations. Destinations are synced sequentially (one after another).</span>
+      </div>
+      <div class="field">
         <label>How often to sync</label>
         <input id="s-interval-min" type="number" value="60" min="1" style="width:6rem">
         <span style="margin-left:0.4rem;color:var(--label)">minutes</span>
@@ -777,7 +783,7 @@
   }
 
   // ---- sync modal ----
-  function openSyncModal(name, source, target, interval, options, syncTool) {
+  function openSyncModal(name, source, target, interval, options, syncTool, targets) {
     const editing = !!name;
     document.getElementById('sync-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Sync Job';
     document.getElementById('sync-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Sync Job';
@@ -790,6 +796,19 @@
     document.getElementById('s-options').value = options || '-az --delete --stats';
     document.getElementById('s-sync-tool').value = syncTool || 'rsync';
     document.getElementById('s-enabled').checked = true;
+    // Populate additional targets
+    const targetsList = document.getElementById('s-targets-list');
+    targetsList.innerHTML = '';
+    if (targets && targets.length > 0) {
+      targets.forEach(t => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.gap = '0.5rem';
+        div.style.alignItems = 'center';
+        div.innerHTML = `<input type="text" name="targets" value="${t}" style="flex:1" placeholder="user@server:/path/"><button type="button" onclick="this.parentElement.remove()" class="btn btn-small" style="color:#dc2626">✕ Remove</button>`;
+        targetsList.appendChild(div);
+      });
+    }
     const form = document.getElementById('sync-form');
     if (editing) {
       form.setAttribute('hx-put', `/api/syncs/${encodeURIComponent(name)}`);
@@ -801,6 +820,15 @@
     htmx.process(form);
     document.getElementById('sync-overlay').classList.add('open');
     document.getElementById('s-name').focus();
+  }
+  function addTargetField() {
+    const targetsList = document.getElementById('s-targets-list');
+    const div = document.createElement('div');
+    div.style.display = 'flex';
+    div.style.gap = '0.5rem';
+    div.style.alignItems = 'center';
+    div.innerHTML = `<input type="text" name="targets" placeholder="user@server:/path/" style="flex:1"><button type="button" onclick="this.parentElement.remove()" class="btn btn-small" style="color:#dc2626">✕ Remove</button>`;
+    targetsList.appendChild(div);
   }
   function closeSyncModal() { document.getElementById('sync-overlay').classList.remove('open'); }
 
