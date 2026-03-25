@@ -79,6 +79,7 @@ class SyncConfig:
     identity: Optional[str] = None
     enabled: bool = True
     sync_tool: str = "rsync"  # "rsync" | "lsyncd"
+    targets: list[str] = field(default_factory=list)  # additional targets to sync to
 
 
 @dataclass
@@ -184,6 +185,9 @@ class AppConfig:
             lines.append(f"enabled = {'true' if s.enabled else 'false'}")
             if s.sync_tool != "rsync":
                 lines.append(f'sync_tool = "{s.sync_tool}"')
+            if s.targets:
+                targets_str = ', '.join(f'"{t}"' for t in s.targets)
+                lines.append(f"targets = [{targets_str}]")
             lines.append("")
 
         content = "\n".join(lines)
