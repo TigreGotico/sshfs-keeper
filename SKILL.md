@@ -1,18 +1,37 @@
 ---
 name: sshfs-keeper-api
 description: >
-  Interact with a running sshfs-keeper daemon via its REST API using curl.
-  Use when the user asks to check mount status, add/remove/remount mounts,
-  manage sync jobs, or configure notifications on a sshfs-keeper instance.
+  Manage remote filesystem mounts (SSHFS/rclone), scheduled sync jobs, and
+  one-shot file transfers on a Linux/macOS machine via a local REST API.
+  Use when the user asks to mount/unmount remote filesystems, sync directories,
+  transfer files between local and remote hosts, browse remote directories,
+  or check mount health.
 triggers:
   - sshfs-keeper
   - sshfs keeper
   - mount status
   - remount
   - sshfs api
+  - remote mount
+  - file transfer
+  - sync job
+  - browse remote
 ---
 
-# sshfs-keeper API — Agent Quick Reference
+# sshfs-keeper — Agent Quick Reference
+
+## What is sshfs-keeper?
+
+A daemon that manages **remote filesystem mounts** (via SSHFS or rclone), **scheduled directory syncs** (rsync/lsyncd/rclone), and **one-shot file transfers** (rsync/scp/rclone) — all configured through a REST API and an optional web dashboard.
+
+It runs as a user-level systemd service, continuously monitors mount health, auto-remounts on failure with exponential backoff, and sends webhook notifications on events.
+
+**Key capabilities:**
+- Mount remote filesystems via SSH (sshfs) or any rclone-supported backend (SFTP, S3, GDrive, SMB, FTP, WebDAV)
+- Schedule recurring directory syncs (rsync direct-over-SSH, lsyncd real-time, rclone for cloud)
+- Run one-shot file transfers with progress tracking, cancel, and resume
+- Browse local and remote directories over SSH
+- Stream logs in real time
 
 ## Defaults
 
