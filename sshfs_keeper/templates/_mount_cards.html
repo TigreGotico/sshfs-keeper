@@ -1,0 +1,11 @@
+{% for m in mounts %}
+{% include "_mount_card.html" %}
+{% endfor %}
+{% if not mounts %}
+<div class="empty-state" style="grid-column:1/-1">
+  <div class="empty-icon">🖧</div>
+  <div style="font-size:1rem;font-weight:600;margin-bottom:0.4rem">No mounts yet</div>
+  <div style="max-width:420px;line-height:1.6">A <strong>mount</strong> makes a folder on another computer appear as a local drive on this machine — so you can open, edit, and browse its files as if they were stored here.</div>
+  <div style="margin-top:0.75rem">Click <strong>+ Add Mount</strong> to connect your first remote drive.</div>
+</div>
+{% endif %}

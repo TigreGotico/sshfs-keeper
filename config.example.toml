@@ -1,0 +1,29 @@
+# sshfs-keeper configuration
+# Location: ~/.config/sshfs-keeper/config.toml
+
+[daemon]
+check_interval = 30          # seconds between health checks
+remount_delay = 5            # seconds to wait before attempting remount
+max_retries = 3              # max consecutive remount attempts before backing off
+backoff_base = 60            # seconds; doubles each retry cycle (60, 120, 240...)
+log_level = "INFO"           # DEBUG | INFO | WARNING | ERROR
+
+[api]
+host = "0.0.0.0"
+port = 8765
+# api_key = "changeme"       # optional: require X-API-Key header on write endpoints
+
+[[mount]]
+name = "nas-media"
+remote = "user@nas.home:/mnt/media"
+local = "/home/user/mnt/media"       # must be writable by your user
+options = "cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect"
+identity = "/home/user/.config/sshfs-keeper/keys/id_ed25519"  # optional
+enabled = true
+
+[[mount]]
+name = "server-backup"
+remote = "user@192.168.1.10:/backup"
+local = "/home/user/mnt/backup"
+options = "cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect"
+enabled = true

@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sshfs-keeper</title>
+  <!-- HTMX core + extensions -->
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js" defer></script>
+  <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* =====================================================================
+       THEME TOKENS — all colours flow from these variables.
+       Each theme overrides them on body.theme-X.
+       ===================================================================== */
+    :root {
+      /* surfaces */
+      --bg:      #0f1117;
+      --surface: #1a1d27;
+      --input:   #0f1117;
+      --border:  #2d3148;
+      /* text */
+      --text:    #e2e8f0;
+      --text2:   #cbd5e1;
+      --label:   #94a3b8;
+      --muted:   #64748b;
+      --dimmed:  #475569;
+      /* accent */
+      --accent:       #1d4ed8;
+      --accent-fg:    #ffffff;
+      --success:      #065f46;
+      --success-fg:   #6ee7b7;
+      --danger:       #7f1d1d;
+      --danger-fg:    #fca5a5;
+      --neutral:      #374151;
+      --neutral-fg:   #d1d5db;
+      /* status badges */
+      --b-healthy-bg:   #064e3b; --b-healthy-fg:   #6ee7b7;
+      --b-error-bg:     #4c0519; --b-error-fg:     #fda4af;
+      --b-stale-bg:     #451a03; --b-stale-fg:     #fdba74;
+      --b-mounting-bg:  #1e3a5f; --b-mounting-fg:  #7dd3fc;
+      --b-disabled-bg:  #1e2132; --b-disabled-fg:  #475569;
+      --b-idle-bg:      #1e2132; --b-idle-fg:      #94a3b8;
+      --b-running-bg:   #1e3a5f; --b-running-fg:   #7dd3fc;
+      --b-ok-bg:        #064e3b; --b-ok-fg:        #6ee7b7;
+      --b-failed-bg:    #4c0519; --b-failed-fg:    #fda4af;
+      --b-unmounted-bg: #1e2132; --b-unmounted-fg: #94a3b8;
+      --b-tool-bg:      #1e3a5f; --b-tool-fg:      #93c5fd;
+      /* usage bar */
+      --usage-track: #2d3148;
+      --usage-ok:    #065f46;
+      --usage-warn:  #b45309;
+      --usage-crit:  #7f1d1d;
+    }
+
+    /* ---- Monokai ---- */
+    body.theme-monokai {
+      --bg:      #272822; --surface: #3e3d32; --input: #1e1f1c; --border: #4a4a3d;
+      --text:    #f8f8f2; --text2: #e2dfc0; --label: #a6a090; --muted: #75715e; --dimmed: #5c5849;
+      --accent:  #a6e22e; --accent-fg: #272822;
+      --success: #3d7a1e; --success-fg: #a6e22e;
+      --danger:  #8c1c2c; --danger-fg: #f92672;
+      --neutral: #4a4a3d; --neutral-fg: #cfcfb6;
+      --b-healthy-bg: #3d7a1e; --b-healthy-fg: #a6e22e;
+      --b-error-bg:   #8c1c2c; --b-error-fg:   #f92672;
+      --b-stale-bg:   #7a5c00; --b-stale-fg:   #e6db74;
+      --b-mounting-bg:#1a4a7a; --b-mounting-fg:#66d9e8;
+      --b-disabled-bg:#3e3d32; --b-disabled-fg:#75715e;
+      --b-idle-bg:    #3e3d32; --b-idle-fg:    #a6a090;
+      --b-running-bg: #1a4a7a; --b-running-fg: #66d9e8;
+      --b-ok-bg:      #3d7a1e; --b-ok-fg:      #a6e22e;
+      --b-failed-bg:  #8c1c2c; --b-failed-fg:  #f92672;
+      --b-unmounted-bg:#3e3d32;--b-unmounted-fg:#a6a090;
+      --b-tool-bg:    #1a4a7a; --b-tool-fg:    #66d9e8;
+      --usage-track:  #4a4a3d; --usage-ok: #3d7a1e; --usage-warn: #7a5c00; --usage-crit: #8c1c2c;
+    }
+
+    /* ---- Dracula ---- */
+    body.theme-dracula {
+      --bg:      #282a36; --surface: #44475a; --input: #21222c; --border: #6272a4;
+      --text:    #f8f8f2; --text2: #e2e2e2; --label: #bd93f9; --muted: #6272a4; --dimmed: #44475a;
+      --accent:  #bd93f9; --accent-fg: #282a36;
+      --success: #1a6640; --success-fg: #50fa7b;
+      --danger:  #7a1a1a; --danger-fg: #ff5555;
+      --neutral: #44475a; --neutral-fg: #f8f8f2;
+      --b-healthy-bg: #1a6640; --b-healthy-fg: #50fa7b;
+      --b-error-bg:   #7a1a1a; --b-error-fg:   #ff5555;
+      --b-stale-bg:   #7a5c00; --b-stale-fg:   #ffb86c;
+      --b-mounting-bg:#2a3a7a; --b-mounting-fg:#8be9fd;
+      --b-disabled-bg:#44475a; --b-disabled-fg:#6272a4;
+      --b-idle-bg:    #44475a; --b-idle-fg:    #bd93f9;
+      --b-running-bg: #2a3a7a; --b-running-fg: #8be9fd;
+      --b-ok-bg:      #1a6640; --b-ok-fg:      #50fa7b;
+      --b-failed-bg:  #7a1a1a; --b-failed-fg:  #ff5555;
+      --b-unmounted-bg:#44475a;--b-unmounted-fg:#bd93f9;
+      --b-tool-bg:    #2a3a7a; --b-tool-fg:    #8be9fd;
+      --usage-track:  #44475a; --usage-ok: #1a6640; --usage-warn: #7a5c00; --usage-crit: #7a1a1a;
+    }
+
+    /* ---- Nord ---- */
+    body.theme-nord {
+      --bg:      #2e3440; --surface: #3b4252; --input: #242933; --border: #4c566a;
+      --text:    #eceff4; --text2: #d8dee9; --label: #81a1c1; --muted: #4c566a; --dimmed: #434c5e;
+      --accent:  #81a1c1; --accent-fg: #2e3440;
+      --success: #2d5a27; --success-fg: #a3be8c;
+      --danger:  #6a2020; --danger-fg: #bf616a;
+      --neutral: #4c566a; --neutral-fg: #eceff4;
+      --b-healthy-bg: #2d5a27; --b-healthy-fg: #a3be8c;
+      --b-error-bg:   #6a2020; --b-error-fg:   #bf616a;
+      --b-stale-bg:   #6a4e20; --b-stale-fg:   #ebcb8b;
+      --b-mounting-bg:#1f3a5a; --b-mounting-fg:#88c0d0;
+      --b-disabled-bg:#3b4252; --b-disabled-fg:#4c566a;
+      --b-idle-bg:    #3b4252; --b-idle-fg:    #81a1c1;
+      --b-running-bg: #1f3a5a; --b-running-fg: #88c0d0;
+      --b-ok-bg:      #2d5a27; --b-ok-fg:      #a3be8c;
+      --b-failed-bg:  #6a2020; --b-failed-fg:  #bf616a;
+      --b-unmounted-bg:#3b4252;--b-unmounted-fg:#81a1c1;
+      --b-tool-bg:    #1f3a5a; --b-tool-fg:    #88c0d0;
+      --usage-track:  #4c566a; --usage-ok: #2d5a27; --usage-warn: #6a4e20; --usage-crit: #6a2020;
+    }
+
+    /* ---- Gruvbox ---- */
+    body.theme-gruvbox {
+      --bg:      #282828; --surface: #3c3836; --input: #1d2021; --border: #504945;
+      --text:    #ebdbb2; --text2: #d5c4a1; --label: #a89984; --muted: #928374; --dimmed: #7c6f64;
+      --accent:  #458588; --accent-fg: #ebdbb2;
+      --success: #3a5c1a; --success-fg: #b8bb26;
+      --danger:  #6a1a1a; --danger-fg: #fb4934;
+      --neutral: #504945; --neutral-fg: #d5c4a1;
+      --b-healthy-bg: #3a5c1a; --b-healthy-fg: #b8bb26;
+      --b-error-bg:   #6a1a1a; --b-error-fg:   #fb4934;
+      --b-stale-bg:   #6a4e1a; --b-stale-fg:   #fabd2f;
+      --b-mounting-bg:#1a4a5a; --b-mounting-fg:#83a598;
+      --b-disabled-bg:#3c3836; --b-disabled-fg:#7c6f64;
+      --b-idle-bg:    #3c3836; --b-idle-fg:    #a89984;
+      --b-running-bg: #1a4a5a; --b-running-fg: #83a598;
+      --b-ok-bg:      #3a5c1a; --b-ok-fg:      #b8bb26;
+      --b-failed-bg:  #6a1a1a; --b-failed-fg:  #fb4934;
+      --b-unmounted-bg:#3c3836;--b-unmounted-fg:#a89984;
+      --b-tool-bg:    #1a4a5a; --b-tool-fg:    #83a598;
+      --usage-track:  #504945; --usage-ok: #3a5c1a; --usage-warn: #6a4e1a; --usage-crit: #6a1a1a;
+    }
+
+    /* ---- Solarized Dark ---- */
+    body.theme-solarized {
+      --bg:      #002b36; --surface: #073642; --input: #01181f; --border: #124d5d;
+      --text:    #839496; --text2: #93a1a1; --label: #657b83; --muted: #586e75; --dimmed: #4a5d64;
+      --accent:  #268bd2; --accent-fg: #fdf6e3;
+      --success: #1a5c27; --success-fg: #859900;
+      --danger:  #6a1a1a; --danger-fg: #dc322f;
+      --neutral: #073642; --neutral-fg: #93a1a1;
+      --b-healthy-bg: #1a5c27; --b-healthy-fg: #859900;
+      --b-error-bg:   #6a1a1a; --b-error-fg:   #dc322f;
+      --b-stale-bg:   #5c4e1a; --b-stale-fg:   #b58900;
+      --b-mounting-bg:#073642; --b-mounting-fg:#268bd2;
+      --b-disabled-bg:#073642; --b-disabled-fg:#586e75;
+      --b-idle-bg:    #073642; --b-idle-fg:    #657b83;
+      --b-running-bg: #073642; --b-running-fg: #268bd2;
+      --b-ok-bg:      #1a5c27; --b-ok-fg:      #859900;
+      --b-failed-bg:  #6a1a1a; --b-failed-fg:  #dc322f;
+      --b-unmounted-bg:#073642;--b-unmounted-fg:#657b83;
+      --b-tool-bg:    #073642; --b-tool-fg:    #2aa198;
+      --usage-track:  #124d5d; --usage-ok: #1a5c27; --usage-warn: #5c4e1a; --usage-crit: #6a1a1a;
+    }
+
+    /* ---- Light ---- */
+    body.theme-light {
+      --bg:      #f8fafc; --surface: #ffffff; --input: #f1f5f9; --border: #e2e8f0;
+      --text:    #0f172a; --text2: #334155; --label: #64748b; --muted: #94a3b8; --dimmed: #cbd5e1;
+      --accent:  #1d4ed8; --accent-fg: #ffffff;
+      --success: #14532d; --success-fg: #166534;
+      --danger:  #7f1d1d; --danger-fg: #991b1b;
+      --neutral: #e2e8f0; --neutral-fg: #475569;
+      --b-healthy-bg: #dcfce7; --b-healthy-fg: #166534;
+      --b-error-bg:   #fee2e2; --b-error-fg:   #991b1b;
+      --b-stale-bg:   #fef3c7; --b-stale-fg:   #92400e;
+      --b-mounting-bg:#dbeafe; --b-mounting-fg:#1e40af;
+      --b-disabled-bg:#f1f5f9; --b-disabled-fg:#94a3b8;
+      --b-idle-bg:    #f1f5f9; --b-idle-fg:    #64748b;
+      --b-running-bg: #dbeafe; --b-running-fg: #1e40af;
+      --b-ok-bg:      #dcfce7; --b-ok-fg:      #166534;
+      --b-failed-bg:  #fee2e2; --b-failed-fg:  #991b1b;
+      --b-unmounted-bg:#f1f5f9;--b-unmounted-fg:#64748b;
+      --b-tool-bg:    #dbeafe; --b-tool-fg:    #1e40af;
+      --usage-track:  #e2e8f0; --usage-ok: #14532d; --usage-warn: #92400e; --usage-crit: #7f1d1d;
+    }
+
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
+
+    /* ---- layout ---- */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.15rem; font-weight: 700; }
+    .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+    .hdr-right label { font-size: 0.8rem; color: var(--muted); }
+    select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+
+    /* ---- tabs ---- */
+    .tabs { display: flex; gap: 0.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
+    .tab { padding: 0.5rem 1rem; font-size: 0.85rem; cursor: pointer; border-radius: 6px 6px 0 0; color: var(--muted); border: 1px solid transparent; border-bottom: none; margin-bottom: -1px; }
+    .tab.active { background: var(--surface); color: var(--text); border-color: var(--border); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ---- cards ---- */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .card-header { padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid var(--border); }
+    .card-name { font-weight: 600; font-size: 0.9rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { padding: 0.18rem 0.55rem; border-radius: 99px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    .badge-healthy   { background: var(--b-healthy-bg);   color: var(--b-healthy-fg); }
+    .badge-unmounted { background: var(--b-unmounted-bg); color: var(--b-unmounted-fg); }
+    .badge-stale     { background: var(--b-stale-bg);     color: var(--b-stale-fg); }
+    .badge-mounting  { background: var(--b-mounting-bg);  color: var(--b-mounting-fg); }
+    .badge-error     { background: var(--b-error-bg);     color: var(--b-error-fg); }
+    .badge-disabled  { background: var(--b-disabled-bg);  color: var(--b-disabled-fg); }
+    .badge-tool      { background: var(--b-tool-bg);      color: var(--b-tool-fg); }
+    .badge-idle      { background: var(--b-idle-bg);      color: var(--b-idle-fg); }
+    .badge-running   { background: var(--b-running-bg);   color: var(--b-running-fg); }
+    .badge-ok        { background: var(--b-ok-bg);        color: var(--b-ok-fg); }
+    .badge-failed    { background: var(--b-failed-bg);    color: var(--b-failed-fg); }
+    .card-body { padding: 0.75rem 1rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
+    .row { display: flex; gap: 0.4rem; }
+    .row .lbl { color: var(--muted); min-width: 85px; flex-shrink: 0; }
+    .row .val { color: var(--text2); word-break: break-all; font-family: monospace; font-size: 0.77rem; }
+    .err-msg { color: var(--b-error-fg); font-size: 0.73rem; padding-top: 0.15rem; }
+    .card-footer { padding: 0.6rem 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    /* ---- buttons ---- */
+    button, .btn { cursor: pointer; border: none; border-radius: 5px; padding: 0.32rem 0.75rem; font-size: 0.76rem; font-weight: 500; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 0.3rem; }
+    button:hover, .btn:hover { opacity: 0.8; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent);  color: var(--accent-fg); }
+    .btn-danger   { background: var(--danger);  color: var(--danger-fg); }
+    .btn-muted    { background: var(--neutral); color: var(--neutral-fg); }
+    .btn-success  { background: var(--success); color: var(--success-fg); }
+    .btn-remount  { background: var(--accent);  color: var(--accent-fg); }
+    .btn-unmount  { background: var(--neutral); color: var(--neutral-fg); }
+    .btn-edit     { background: var(--surface); color: var(--label);    border: 1px solid var(--border); }
+    .btn-del      { background: var(--surface); color: var(--b-error-fg); border: 1px solid var(--border); }
+    .btn-disable  { background: var(--neutral); color: var(--neutral-fg); }
+    .btn-enable   { background: var(--success); color: var(--success-fg); }
+    .btn-tool     { background: var(--b-tool-bg); color: var(--b-tool-fg); border: 1px solid var(--border); }
+
+    /* ---- htmx loading indicator ---- */
+    .htmx-indicator { opacity: 0; transition: opacity 0.2s; }
+    .htmx-request .htmx-indicator { opacity: 1; }
+
+    .add-btn-row { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+
+    /* ---- settings panel ---- */
+    .settings-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; max-width: 480px; display: grid; gap: 0.75rem; }
+    .settings-form label { font-size: 0.8rem; color: var(--label); display: block; margin-bottom: 0.2rem; }
+    .settings-form input { width: 100%; background: var(--input); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 5px; font-size: 0.85rem; }
+    .settings-form select { width: 100%; }
+    .settings-form .save-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.25rem; }
+    .settings-form .hint { font-size: 0.71rem; color: var(--dimmed); display: block; margin-top: 0.2rem; line-height: 1.5; }
+    .settings-form input[type=number] { width: auto; display: inline; }
+
+    /* ---- keys panel ---- */
+    .keys-list { display: flex; flex-direction: column; gap: 0.5rem; max-width: 560px; }
+    .key-row { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.6rem 0.9rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; font-family: monospace; }
+    .key-row .key-name { flex: 1; color: var(--text2); }
+    .key-row .key-path { font-size: 0.72rem; color: var(--dimmed); }
+    .upload-box { margin-top: 1rem; background: var(--surface); border: 2px dashed var(--border); border-radius: 10px; padding: 1.5rem; max-width: 560px; text-align: center; font-size: 0.85rem; color: var(--muted); cursor: pointer; transition: border-color 0.2s; }
+    .upload-box:hover, .upload-box.drag { border-color: var(--accent); color: var(--label); }
+    .upload-box input[type=file] { display: none; }
+
+    /* ---- modal ---- */
+    .overlay { display: none; position: fixed; inset: 0; background: #000a; z-index: 100; align-items: center; justify-content: center; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; width: min(520px, 95vw); max-height: 90vh; overflow-y: auto; }
+    .modal h2 { font-size: 1rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .modal-subtitle { font-size: 0.78rem; color: var(--dimmed); margin-bottom: 1.1rem; line-height: 1.5; }
+    .form-grid { display: grid; gap: 0.75rem; }
+    .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .field label { font-size: 0.78rem; color: var(--label); }
+    .field input, .field select, .field textarea { background: var(--input); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 5px; font-size: 0.85rem; width: 100%; }
+    .field textarea { font-family: monospace; resize: vertical; min-height: 60px; }
+    .field .hint { font-size: 0.71rem; color: var(--dimmed); }
+    .modal-footer { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.1rem; }
+    .check-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; }
+    .check-row input[type=checkbox] { width: 1rem; height: 1rem; accent-color: var(--accent); }
+
+    /* ---- usage bar ---- */
+    .usage-bar-wrap { margin-top: 0.35rem; }
+    .usage-bar-track { background: var(--usage-track); border-radius: 99px; height: 6px; overflow: hidden; }
+    .usage-bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s; }
+    .usage-bar-fill.ok   { background: var(--usage-ok); }
+    .usage-bar-fill.warn { background: var(--usage-warn); }
+    .usage-bar-fill.crit { background: var(--usage-crit); }
+    .usage-label { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+
+    /* ---- empty state ---- */
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.88rem; }
+    .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 0.5rem; opacity: 0.4; }
+
+    /* ---- log modal ---- */
+    .log-output { background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem; font-family: monospace; font-size: 0.72rem; color: var(--label); white-space: pre-wrap; max-height: 340px; overflow-y: auto; line-height: 1.5; }
+
+    /* ---- SSE indicator ---- */
+    .sse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dimmed); display: inline-block; transition: background 0.5s; }
+    .sse-dot.htmx-sse-open { background: var(--b-healthy-fg); }
+
+    /* ---- toast ---- */
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.82rem; box-shadow: 0 4px 24px #0008; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; max-width: 320px; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body hx-ext="sse" sse-connect="/api/events">
+
+<header>
+  <h1>⚙ sshfs-keeper</h1>
+  <div class="hdr-right">
+    <!-- SSE connection indicator: .htmx-sse-open class is added by htmx-ext-sse when connected -->
+    <span class="sse-dot" sse-swap="__never__" title="Live updates"></span>
+    <select id="theme-select" onchange="setTheme(this.value)" title="UI theme" style="font-size:0.75rem">
+      <option value="dark">🌑 Dark</option>
+      <option value="monokai">🟢 Monokai</option>
+      <option value="dracula">🧛 Dracula</option>
+      <option value="nord">❄️ Nord</option>
+      <option value="gruvbox">🟤 Gruvbox</option>
+      <option value="solarized">☀️ Solarized</option>
+      <option value="light">🌕 Light</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('mounts')">Mounts</div>
+    <div class="tab" onclick="switchTab('syncs')">Sync</div>
+    <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
+    <div class="tab" onclick="switchTab('settings')">Settings</div>
+    <div class="tab" onclick="switchTab('notifications')">Notifications</div>
+  </div>
+
+  <!-- ===== MOUNTS TAB ===== -->
+  <div class="tab-panel active" id="tab-mounts">
+    <div class="add-btn-row">
+      <button class="btn btn-primary" onclick="openMountModal()">+ Add Mount</button>
+      <span id="mounts-indicator" class="htmx-indicator" style="font-size:0.78rem;color:#64748b">updating…</span>
+    </div>
+    <div class="grid" id="mounts-grid"
+         hx-get="/fragments/mounts"
+         hx-trigger="refresh, sse:mount_healthy, sse:mount_error"
+         hx-swap="innerHTML"
+         hx-sync="this:replace"
+         hx-indicator="#mounts-indicator">
+      {% include "_mount_cards.html" %}
+    </div>
+  </div>
+
+  <!-- ===== SYNC TAB ===== -->
+  <div class="tab-panel" id="tab-syncs">
+    <div class="add-btn-row">
+      <button class="btn btn-primary" onclick="openSyncModal()">+ Add Sync Job</button>
+      <span id="syncs-indicator" class="htmx-indicator" style="font-size:0.78rem;color:#64748b">updating…</span>
+    </div>
+    <div class="grid" id="syncs-grid"
+         hx-get="/fragments/syncs"
+         hx-trigger="refresh"
+         hx-swap="innerHTML"
+         hx-sync="this:replace"
+         hx-indicator="#syncs-indicator">
+      {% include "_sync_cards.html" %}
+    </div>
+  </div>
+
+  <!-- ===== SSH KEYS TAB ===== -->
+  <div class="tab-panel" id="tab-keys">
+    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
+      An <strong>SSH key</strong> lets sshfs-keeper connect to your servers without prompting for a password.
+      If you have a key at <code>~/.ssh/id_ed25519</code> or <code>~/.ssh/id_rsa</code> it will be used automatically — you only need to upload one here if you want to use a different key for specific mounts.
+      Generate a new key with: <code>ssh-keygen -t ed25519</code>, then copy it to your server: <code>ssh-copy-id user@server</code>.
+    </p>
+    <div class="keys-list" id="keys-list">
+      {% include "_keys_list.html" %}
+    </div>
+    <label class="upload-box" id="upload-box"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+      <input type="file" id="key-file-input" accept=".pem,.key,.rsa,.ed25519,*" onchange="uploadKey(this.files[0])">
+      <div>🔒 Drop your private key file here or <strong>click to browse</strong></div>
+      <div style="margin-top:0.4rem;font-size:0.75rem">Upload the <strong>private</strong> key (the file without <code>.pub</code>). Stored securely at <code>~/.config/sshfs-keeper/keys/</code> with permissions 600.</div>
+    </label>
+  </div>
+
+  <!-- ===== NOTIFICATIONS TAB ===== -->
+  <div class="tab-panel" id="tab-notifications">
+    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
+      Get notified when a mount goes down or comes back up.
+      Paste any HTTP webhook URL — works with <strong>ntfy.sh</strong> (free push notifications to your phone), <strong>Slack</strong>, <strong>Discord</strong>, or any service that accepts a JSON POST.
+    </p>
+    <form class="settings-form"
+          hx-put="/api/notifications"
+          hx-ext="json-enc"
+          hx-swap="none">
+      <div>
+        <label>Webhook URL</label>
+        <input type="url" name="webhook_url"
+               value="{{ notifications.webhook_url or '' }}"
+               placeholder="https://ntfy.sh/my-topic">
+        <span class="hint">
+          ntfy.sh is the easiest option: go to <a href="https://ntfy.sh" target="_blank" style="color:var(--accent)">ntfy.sh</a>, pick a topic name, paste the URL here, and install the ntfy app on your phone.
+          For Slack: create an Incoming Webhook in your workspace settings. For Discord: Server Settings → Integrations → Webhooks.
+        </span>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="n-failure" name="on_failure" {% if notifications.on_failure %}checked{% endif %}>
+        <label for="n-failure">Notify when a mount goes down (failure)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="n-recovery" name="on_recovery" {% if notifications.on_recovery %}checked{% endif %}>
+        <label for="n-recovery">Notify when a mount comes back up (recovery)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="n-backoff" name="on_backoff" {% if notifications.on_backoff %}checked{% endif %}>
+        <label for="n-backoff">Notify when retrying slows down after repeated failures (backoff)</label>
+      </div>
+      <div class="save-row">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+    <p style="margin-top:0.9rem;font-size:0.75rem;color:var(--dimmed)">
+      JSON payload sent to the webhook: <code>{"event":"failure"|"recovery"|"backoff","mount":"name","error":"...","timestamp":"..."}</code>
+    </p>
+  </div>
+
+  <!-- ===== SETTINGS TAB ===== -->
+  <div class="tab-panel" id="tab-settings">
+    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
+      These settings control how aggressively sshfs-keeper watches your mounts and retries failed connections. The defaults work well for most home networks.
+    </p>
+    <form class="settings-form"
+          hx-put="/api/settings"
+          hx-ext="json-enc"
+          hx-swap="none">
+      <div>
+        <label>Check interval</label>
+        <input type="number" name="check_interval" value="{{ daemon.check_interval }}" min="5" style="width:5rem"> seconds
+        <span class="hint">How often to test whether each mount is alive. Lower = faster detection but more overhead. 30s is a good default.</span>
+      </div>
+      <div>
+        <label>Remount delay</label>
+        <input type="number" name="remount_delay" value="{{ daemon.remount_delay }}" min="0" style="width:5rem"> seconds
+        <span class="hint">How long to wait before attempting to remount after a failure. Gives the server time to come back up.</span>
+      </div>
+      <div>
+        <label>Max retries before slowing down</label>
+        <input type="number" name="max_retries" value="{{ daemon.max_retries }}" min="1" style="width:5rem"> attempts
+        <span class="hint">After this many consecutive failures, sshfs-keeper enters backoff mode and retries less frequently to avoid hammering an offline server.</span>
+      </div>
+      <div>
+        <label>Backoff base</label>
+        <input type="number" name="backoff_base" value="{{ daemon.backoff_base }}" min="10" style="width:5rem"> seconds
+        <span class="hint">Starting wait time in backoff mode. Doubles after each failed attempt (60s → 120s → 240s…). The mount will still remount automatically once the server returns.</span>
+      </div>
+      <div>
+        <label>Log level</label>
+        <select name="log_level">
+          {% for lvl in ['DEBUG','INFO','WARNING','ERROR'] %}
+          <option {% if daemon.log_level == lvl %}selected{% endif %}>{{ lvl }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">INFO is recommended. Use DEBUG to see every check and connection attempt (very verbose). Use WARNING or ERROR to only log problems.</span>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="s-json-logs" name="json_logs" {% if daemon.json_logs %}checked{% endif %}>
+        <label for="s-json-logs">Structured JSON logging (for log aggregators like Grafana Loki)</label>
+      </div>
+      <div class="save-row">
+        <button type="submit" class="btn btn-primary">Save settings</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+<footer style="text-align:center;padding:1.5rem 1rem 2rem;font-size:0.72rem;color:var(--dimmed);border-top:1px solid var(--border);margin-top:2rem;line-height:1.8">
+  <div style="margin-bottom:0.5rem">
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.6rem;font-size:0.7rem;color:#f59e0b;letter-spacing:0.03em">
+      ⚠ Vibe-coded software — assembled with AI assistance, deployed with reckless optimism. Use at your own risk.
+    </span>
+  </div>
+  <div style="margin-bottom:0.6rem">
+    <a href="https://paypal.me/AnaIsabelFerreira" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:0.4rem;background:#0070ba;color:#fff;border-radius:6px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:600;text-decoration:none;transition:background 0.15s">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788l.038-.196.731-4.63.047-.256a.932.932 0 0 1 .92-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.77-4.479z"/></svg>
+      Donate via PayPal
+    </a>
+  </div>
+  <div>© 2026 Tigre Gótico Lda. — sshfs-keeper is open source, licensed under Apache 2.0</div>
+</footer>
+
+<!-- ===== ADD / EDIT MOUNT MODAL ===== -->
+<div class="overlay" id="mount-overlay" onclick="if(event.target===this)closeMountModal()">
+  <div class="modal">
+    <h2 id="mount-modal-title">Add Mount</h2>
+    <p class="modal-subtitle" id="mount-modal-subtitle">Make a remote folder appear as a local drive on this machine. sshfs-keeper will keep it mounted and automatically reconnect if the connection drops.</p>
+    <form id="mount-form" class="form-grid"
+          hx-ext="json-enc"
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){closeMountModal();htmx.trigger('#mounts-grid','refresh')}">
+      <input type="hidden" name="_editing" id="m-editing" value="">
+      <div class="field">
+        <label>Name <span style="color:#fca5a5">*</span></label>
+        <input id="m-name" name="name" placeholder="my-nas">
+        <span class="hint">A short label you'll recognise — like <code>nas</code>, <code>backup-drive</code>, or <code>work-server</code>. No spaces.</span>
+      </div>
+      <div class="field">
+        <label>Connection type</label>
+        <select id="m-protocol" onchange="applyProtocolTemplate()">
+          <option value="sftp">SSH / SFTP — Linux, NAS, Raspberry Pi, any server with SSH</option>
+          <option value="ftp">FTP — older servers and some NAS devices</option>
+          <option value="webdav">WebDAV — Nextcloud, ownCloud, Windows shares over HTTP</option>
+          <option value="smb">SMB / CIFS — Windows shares, Samba, most NAS web UIs</option>
+          <option value="rclone">rclone remote — S3, Google Drive, Dropbox, or a pre-configured rclone remote</option>
+          <option value="custom">Custom — I know what I'm doing</option>
+        </select>
+        <span class="hint" id="m-proto-hint">SSH is the most common choice for Linux servers and NAS devices. It encrypts your connection automatically.</span>
+      </div>
+      <div class="field">
+        <label>Address &amp; path on the remote <span style="color:#fca5a5">*</span></label>
+        <input id="m-remote" name="remote" placeholder="user@192.168.1.1:/media/data">
+        <span class="hint" id="m-remote-hint">Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/mnt/storage</code></span>
+      </div>
+      <div class="field">
+        <label>Where to mount it on this computer <span style="color:#fca5a5">*</span></label>
+        <input id="m-local" name="local" placeholder="/mnt/my-nas">
+        <span class="hint">This is the folder you'll open on this machine to access the remote files. It will be created automatically if it doesn't exist. Example: <code>/mnt/nas</code> or <code>/home/you/nas</code></span>
+      </div>
+      <div class="field">
+        <label>SSH key <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <select id="m-identity" name="identity">
+          <option value="">— use SSH agent or default key (~/.ssh/id_*) —</option>
+          {% for k in keys %}
+          <option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">An SSH key lets you connect without typing a password. If you haven't set one up yet, leave this blank — it will use your system's default key. Upload keys in the <strong>SSH Keys</strong> tab.</span>
+      </div>
+      <div class="field">
+        <label>Mount driver</label>
+        <select id="m-mount-tool" name="mount_tool">
+          <option value="sshfs">sshfs — fast, low overhead, SSH only</option>
+          <option value="rclone">rclone — supports FTP, WebDAV, SMB, S3, cloud storage</option>
+        </select>
+        <span class="hint" id="m-tool-hint">sshfs is the default for SSH connections. rclone is required for FTP, WebDAV, SMB, and cloud storage. The Protocol selector above sets this automatically.</span>
+      </div>
+      <div class="field">
+        <label>Advanced options <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <textarea id="m-options" name="options">cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect</textarea>
+        <span class="hint">Comma-separated sshfs/FUSE options. The defaults enable caching, compression, and automatic reconnection — most users should leave this as-is. Ignored when using rclone.</span>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="m-enabled" name="enabled" checked>
+        <label for="m-enabled">Start monitoring immediately after saving</label>
+      </div>
+      <div class="modal-footer" style="margin-top:0">
+        <button type="button" class="btn btn-muted" onclick="closeMountModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="mount-modal-save-btn">Add Mount</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== ADD / EDIT SYNC MODAL ===== -->
+<div class="overlay" id="sync-overlay" onclick="if(event.target===this)closeSyncModal()">
+  <div class="modal">
+    <h2 id="sync-modal-title">Add Sync Job</h2>
+    <p class="modal-subtitle">Automatically copy files from one place to another on a schedule. Great for backups, mirroring, or keeping two folders in sync.</p>
+    <form id="sync-form" class="form-grid"
+          hx-ext="json-enc"
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){closeSyncModal();htmx.trigger('#syncs-grid','refresh')}">
+      <input type="hidden" name="_editing" id="s-editing" value="">
+      <div class="field">
+        <label>Name <span style="color:#fca5a5">*</span></label>
+        <input id="s-name" name="name" placeholder="photos-backup">
+        <span class="hint">A label you'll recognise — like <code>photos-backup</code> or <code>docs-mirror</code>.</span>
+      </div>
+      <div class="field">
+        <label>Source — copy files FROM here <span style="color:#fca5a5">*</span></label>
+        <input id="s-source" name="source" placeholder="/mnt/nas/photos/">
+        <span class="hint">A folder on this machine or a remote path like <code>user@server:/data/</code>. Include a trailing slash to sync folder contents (not the folder itself).</span>
+      </div>
+      <div class="field">
+        <label>Destination — copy files TO here <span style="color:#fca5a5">*</span></label>
+        <input id="s-target" name="target" placeholder="/mnt/backup/photos/">
+        <span class="hint">Where the copies end up. Can be a local folder or a remote path like <code>user@server:/backup/</code>.</span>
+      </div>
+      <div class="field">
+        <label>How often to sync</label>
+        <input id="s-interval-min" type="number" value="60" min="1" style="width:6rem">
+        <span style="margin-left:0.4rem;color:var(--label)">minutes</span>
+        <input type="hidden" id="s-interval" name="interval" value="3600">
+        <span class="hint">sshfs-keeper will run the sync roughly every N minutes. Set to <code>1440</code> for once a day.</span>
+      </div>
+      <div class="field">
+        <label>Sync tool</label>
+        <select id="s-sync-tool" name="sync_tool">
+          <option value="rsync">rsync — copies only changed files, very efficient (recommended)</option>
+          <option value="lsyncd">lsyncd — watches for file changes and syncs instantly (requires lsyncd)</option>
+          <option value="rclone">rclone — for S3, Google Drive, Dropbox, or cloud storage</option>
+        </select>
+        <span class="hint">rsync is the right choice for most situations. lsyncd reacts to changes in real time instead of waiting for the next scheduled run. rclone is needed for cloud storage.</span>
+      </div>
+      <div class="field">
+        <label>Extra flags <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <input id="s-options" name="options" value="-az --delete --stats">
+        <span class="hint"><code>-az</code> = archive mode + compression. <code>--delete</code> removes files from the destination that no longer exist at the source (mirror mode). Remove <code>--delete</code> if you want to keep old files.</span>
+      </div>
+      <div class="field">
+        <label>SSH key <span style="color:#94a3b8;font-weight:400">(optional — for remote paths)</span></label>
+        <select id="s-identity" name="identity">
+          <option value="">— use SSH agent or default key —</option>
+          {% for k in keys %}
+          <option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Only needed if source or destination is a remote server and you want to use a specific key.</span>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="s-enabled" name="enabled" checked>
+        <label for="s-enabled">Enable this sync job immediately</label>
+      </div>
+      <div class="modal-footer" style="margin-top:0">
+        <button type="button" class="btn btn-muted" onclick="closeSyncModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="sync-modal-save-btn">Add Sync Job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== SYNC LOG MODAL ===== -->
+<div class="overlay" id="log-overlay" onclick="if(event.target===this)closeLogModal()">
+  <div class="modal" style="width:min(700px,95vw)">
+    <h2 id="log-modal-title">Sync log</h2>
+    <div class="log-output" id="log-content">Loading…</div>
+    <div class="modal-footer">
+      <button class="btn btn-muted" onclick="closeLogModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---- tabs (minimal JS — CSS only alternative would need :target anchors) ----
+  function switchTab(name) {
+    const panels = ['mounts','syncs','keys','settings','notifications'];
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', panels[i] === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  }
+
+  // ---- toast (driven by HX-Trigger: {"showToast": "...", "toastOk": true}) ----
+  function toast(msg, ok = true) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.borderColor = ok ? '#065f46' : '#7f1d1d';
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+  document.addEventListener('showToast', e => toast(e.detail.value, e.detail.toastOk !== false));
+  document.addEventListener('htmx:responseError', () => toast('Request failed', false));
+
+  // ---- mount modal ----
+  function openMountModal(name, remote, local, mountTool) {
+    const editing = !!name;
+    document.getElementById('mount-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Mount';
+    document.getElementById('mount-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Mount';
+    document.getElementById('m-editing').value = name || '';
+    document.getElementById('m-name').value = name || '';
+    document.getElementById('m-remote').value = remote || '';
+    document.getElementById('m-local').value = local || '';
+    document.getElementById('m-mount-tool').value = mountTool || 'sshfs';
+    if (!editing) {
+      document.getElementById('m-options').value = 'cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect';
+      document.getElementById('m-enabled').checked = true;
+      document.getElementById('m-protocol').value = 'sftp';
+    } else {
+      // Detect protocol from existing remote value
+      const r = remote || '';
+      let proto = 'custom';
+      if (r.startsWith(':ftp,')) proto = 'ftp';
+      else if (r.startsWith(':webdav,')) proto = 'webdav';
+      else if (r.startsWith(':smb,')) proto = 'smb';
+      else if (/^[a-zA-Z][a-zA-Z0-9_-]*:/.test(r) && !r.includes('@')) proto = 'rclone';
+      else if (r.includes('@')) proto = 'sftp';
+      document.getElementById('m-protocol').value = proto;
+    }
+    // Set form action based on add vs edit
+    const form = document.getElementById('mount-form');
+    if (editing) {
+      form.setAttribute('hx-put', `/api/mounts/${encodeURIComponent(name)}`);
+      form.removeAttribute('hx-post');
+    } else {
+      form.setAttribute('hx-post', '/api/mounts');
+      form.removeAttribute('hx-put');
+    }
+    htmx.process(form);  // re-process HTMX attributes after dynamic change
+    document.getElementById('mount-overlay').classList.add('open');
+    document.getElementById('m-name').focus();
+  }
+  function closeMountModal() { document.getElementById('mount-overlay').classList.remove('open'); }
+
+  const PROTOCOL_TEMPLATES = {
+    sftp: {
+      remote: 'user@host:/path',
+      placeholder: 'alice@192.168.1.10:/mnt/storage',
+      tool: 'sshfs',
+      remoteHint: 'Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/media/data</code>. Use the server\'s IP address or hostname.',
+      protoHint: 'SSH is the most common choice for Linux servers, NAS devices, and Raspberry Pis. It encrypts your connection automatically and works over your local network or the internet.',
+      toolHint: 'sshfs is the fastest option for SSH connections and requires no extra configuration.',
+    },
+    ftp: {
+      remote: ':ftp,host=HOST,user=USER,pass=PASS:/path',
+      placeholder: ':ftp,host=192.168.1.1,user=miro,pass=secret:/pub',
+      tool: 'rclone',
+      remoteHint: 'Replace <code>HOST</code>, <code>USER</code>, and <code>PASS</code> with your FTP server details. The path at the end is the folder on the server.',
+      protoHint: 'FTP is used by some older NAS devices and web hosting providers. It is not encrypted — use SFTP if your device supports it.',
+      toolHint: 'rclone is required for FTP. Make sure rclone is installed (<code>sudo pacman -S rclone</code> / <code>apt install rclone</code>).',
+    },
+    webdav: {
+      remote: ':webdav,url=http://HOST/dav,user=USER,pass=PASS:',
+      placeholder: ':webdav,url=http://192.168.1.1/nextcloud/dav,user=alice,pass=secret:',
+      tool: 'rclone',
+      remoteHint: 'Replace the URL with your WebDAV endpoint. Nextcloud example: <code>http://192.168.1.1/nextcloud/remote.php/webdav</code>.',
+      protoHint: 'WebDAV is used by Nextcloud, ownCloud, and some NAS web interfaces. Change <code>http://</code> to <code>https://</code> if your server uses SSL.',
+      toolHint: 'rclone is required for WebDAV mounts.',
+    },
+    smb: {
+      remote: ':smb,host=HOST,user=USER,pass=PASS:/share',
+      placeholder: ':smb,host=192.168.1.1,user=miro,pass=secret:/Media',
+      tool: 'rclone',
+      remoteHint: 'Replace <code>HOST</code>, <code>USER</code>, <code>PASS</code>, and <code>/share</code> with your Windows share or Samba details. The share name is the part after <code>\\\\server\\</code> in Windows.',
+      protoHint: 'SMB is the protocol Windows uses for file sharing. Most NAS devices (Synology, QNAP, etc.) also expose shares over SMB.',
+      toolHint: 'rclone is required for SMB mounts.',
+    },
+    rclone: {
+      remote: 'remotename:/path',
+      placeholder: 'mygoogledrive:/Documents',
+      tool: 'rclone',
+      remoteHint: 'Use the name of a remote you have already configured with <code>rclone config</code>, followed by <code>:/path</code>. Run <code>rclone listremotes</code> to see your configured remotes.',
+      protoHint: 'Use this for S3, Google Drive, Dropbox, Backblaze B2, or any other rclone-supported backend that you have already set up with <code>rclone config</code>.',
+      toolHint: 'rclone is required for cloud storage remotes.',
+    },
+    custom: {
+      remote: '',
+      placeholder: '',
+      tool: 'sshfs',
+      remoteHint: 'Enter the remote path in whatever format your chosen mount tool expects.',
+      protoHint: 'Advanced mode — enter the remote path manually.',
+      toolHint: 'Choose sshfs for SSH connections or rclone for everything else.',
+    },
+  };
+  function applyProtocolTemplate() {
+    const proto = document.getElementById('m-protocol').value;
+    const tpl = PROTOCOL_TEMPLATES[proto];
+    if (!tpl) return;
+    const remoteEl = document.getElementById('m-remote');
+    const currentVal = remoteEl.value.trim();
+    const prevTemplates = Object.values(PROTOCOL_TEMPLATES).map(t => t.remote);
+    if (!currentVal || prevTemplates.includes(currentVal)) {
+      remoteEl.value = tpl.remote;
+    }
+    remoteEl.placeholder = tpl.placeholder;
+    document.getElementById('m-mount-tool').value = tpl.tool;
+    document.getElementById('m-proto-hint').innerHTML = tpl.protoHint;
+    document.getElementById('m-remote-hint').innerHTML = tpl.remoteHint;
+    document.getElementById('m-tool-hint').innerHTML = tpl.toolHint;
+  }
+
+  // ---- sync modal ----
+  function openSyncModal(name, source, target, interval, options, syncTool) {
+    const editing = !!name;
+    document.getElementById('sync-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Sync Job';
+    document.getElementById('sync-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Sync Job';
+    document.getElementById('s-editing').value = name || '';
+    document.getElementById('s-name').value = name || '';
+    document.getElementById('s-source').value = source || '';
+    document.getElementById('s-target').value = target || '';
+    document.getElementById('s-interval-min').value = interval ? Math.round(interval / 60) : 60;
+    document.getElementById('s-interval').value = interval || 3600;
+    document.getElementById('s-options').value = options || '-az --delete --stats';
+    document.getElementById('s-sync-tool').value = syncTool || 'rsync';
+    document.getElementById('s-enabled').checked = true;
+    const form = document.getElementById('sync-form');
+    if (editing) {
+      form.setAttribute('hx-put', `/api/syncs/${encodeURIComponent(name)}`);
+      form.removeAttribute('hx-post');
+    } else {
+      form.setAttribute('hx-post', '/api/syncs');
+      form.removeAttribute('hx-put');
+    }
+    htmx.process(form);
+    document.getElementById('sync-overlay').classList.add('open');
+    document.getElementById('s-name').focus();
+  }
+  function closeSyncModal() { document.getElementById('sync-overlay').classList.remove('open'); }
+
+  // Sync interval: minutes UI → seconds hidden field
+  document.getElementById('s-interval-min').addEventListener('input', e => {
+    document.getElementById('s-interval').value = (+e.target.value || 1) * 60;
+  });
+
+  // ---- log modal ----
+  function closeLogModal() { document.getElementById('log-overlay').classList.remove('open'); }
+
+  // ---- SSH key upload (multipart — keep as JS; HTMX file upload needs extra config) ----
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('upload-box').classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) uploadKey(file);
+  }
+  async function uploadKey(file) {
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch('/api/keys', { method: 'POST', body: form });
+    const d = await r.json();
+    if (d.name) {
+      toast(`Key "${d.name}" uploaded ✔`);
+      htmx.ajax('GET', '/fragments/keys', { target: '#keys-list', swap: 'innerHTML' });
+    } else {
+      toast(d.detail || 'Upload failed', false);
+    }
+    document.getElementById('key-file-input').value = '';
+  }
+
+  // ---- themes ----
+  const THEMES = ['dark','monokai','dracula','nord','gruvbox','solarized','light'];
+  function setTheme(name) {
+    THEMES.forEach(t => document.body.classList.remove('theme-' + t));
+    if (name !== 'dark') document.body.classList.add('theme-' + name);
+    localStorage.setItem('theme', name);
+    const sel = document.getElementById('theme-select');
+    if (sel) sel.value = name;
+  }
+  (function() {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+  })();
+
+  // ---- keyboard ----
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeMountModal(); closeSyncModal(); closeLogModal(); }
+  });
+</script>
+</body>
+</html>

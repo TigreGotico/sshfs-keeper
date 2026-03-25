@@ -1,0 +1,15 @@
+{% for k in keys %}
+<div class="key-row" id="keyrow-{{ k }}">
+  <span class="key-name">🔑 {{ k }}</span>
+  <span class="key-path">~/.config/sshfs-keeper/keys/{{ k }}</span>
+  <button class="btn btn-del"
+    hx-delete="/api/keys/{{ k | urlencode }}"
+    hx-confirm="Delete key &quot;{{ k }}&quot;?"
+    hx-target="#keys-list"
+    hx-get="/fragments/keys"
+    hx-swap="innerHTML">✕ Delete</button>
+</div>
+{% endfor %}
+{% if not keys %}
+<p style="color:#475569;font-size:0.85rem">No keys uploaded yet.</p>
+{% endif %}

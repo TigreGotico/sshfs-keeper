@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sshfs-keeper"
+version = "0.1.0"
+description = "Daemon that monitors and auto-heals SSHFS mounts with a FastAPI web UI"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "pydantic>=2.0.0",
+    "psutil>=5.9.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+    "python-json-logger>=2.0",
+]
+
+[project.scripts]
+sshfs-keeper = "sshfs_keeper.main:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sshfs_keeper*"]
+
+[tool.setuptools.package-data]
+sshfs_keeper = ["templates/*.html", "templates/_*.html"]

@@ -1,0 +1,11 @@
+{% for s in syncs %}
+{% include "_sync_card.html" %}
+{% endfor %}
+{% if not syncs %}
+<div class="empty-state" style="grid-column:1/-1">
+  <div class="empty-icon">🔄</div>
+  <div style="font-size:1rem;font-weight:600;margin-bottom:0.4rem">No sync jobs yet</div>
+  <div style="max-width:420px;line-height:1.6">A <strong>sync job</strong> automatically copies files from one place to another on a schedule — great for backups, mirroring a NAS to an external drive, or keeping two servers in sync.</div>
+  <div style="margin-top:0.75rem">Click <strong>+ Add Sync Job</strong> to set one up.</div>
+</div>
+{% endif %}

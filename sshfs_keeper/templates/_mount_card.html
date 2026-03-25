@@ -1,0 +1,67 @@
+<div class="card" id="card-{{ m.name }}"
+     hx-get="/fragments/mounts/{{ m.name | urlencode }}"
+     hx-trigger="sse:mount_update_{{ m.name }}"
+     hx-swap="outerHTML">
+  <div class="card-header">
+    <span class="card-name" title="{{ m.name }}">{{ m.name }}</span>
+    <span class="badge badge-{{ m.status }}">{{ m.status }}</span>
+    <span class="badge badge-tool">{{ m.mount_tool }}</span>
+  </div>
+  <div class="card-body">
+    <div class="row"><span class="lbl">Remote</span><span class="val">{{ m.remote }}</span></div>
+    <div class="row"><span class="lbl">Local</span><span class="val">{{ m.local }}</span></div>
+    <div class="row"><span class="lbl">Last check</span><span class="val" style="font-family:inherit">
+      {% if m.last_check %}{{ (now - m.last_check)|int }}s ago{% else %}—{% endif %}
+    </span></div>
+    <div class="row"><span class="lbl">Mounts</span><span class="val" style="font-family:inherit">{{ m.mount_count }}</span></div>
+    {% if m.mount_duration_seconds is not none %}
+    <div class="row"><span class="lbl">Mount time</span><span class="val" style="font-family:inherit">{{ "%.1f"|format(m.mount_duration_seconds) }}s</span></div>
+    {% endif %}
+    {% if m.last_error %}<div class="err-msg">✖ {{ m.last_error }}</div>{% endif %}
+    {% if m.backoff_remaining > 0 %}<div class="err-msg">⏳ Backoff {{ m.backoff_remaining|int }}s</div>{% endif %}
+    {% if m.usage %}
+    <div class="usage-bar-wrap">
+      <div class="usage-bar-track">
+        <div class="usage-bar-fill {% if m.usage.percent_used >= 90 %}crit{% elif m.usage.percent_used >= 75 %}warn{% else %}ok{% endif %}"
+             style="width:{{ m.usage.percent_used }}%"></div>
+      </div>
+      <div class="usage-label">{{ m.usage.used_gb }} GB / {{ m.usage.total_gb }} GB used ({{ m.usage.percent_used }}%)</div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="card-footer">
+    <button class="btn btn-remount"
+      hx-post="/api/mounts/{{ m.name | urlencode }}/remount"
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')"
+      {% if not m.enabled %}disabled{% endif %}>↺ Remount</button>
+    <button class="btn btn-unmount"
+      hx-post="/api/mounts/{{ m.name | urlencode }}/unmount"
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')"
+      title="Force-unmount this mount point">⏏ Unmount</button>
+    <button class="btn btn-edit"
+      onclick="openMountModal('{{ m.name }}','{{ m.remote }}','{{ m.local }}','{{ m.mount_tool }}')">✎ Edit</button>
+    <button class="btn btn-tool"
+      hx-patch="/api/mounts/{{ m.name | urlencode }}/backend"
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')"
+      title="Switch mount backend (sshfs ↔ rclone)">⇄ {{ m.mount_tool }}</button>
+    {% if m.enabled %}
+    <button class="btn btn-disable"
+      hx-post="/api/mounts/{{ m.name | urlencode }}/disable"
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')">Pause</button>
+    {% else %}
+    <button class="btn btn-enable"
+      hx-post="/api/mounts/{{ m.name | urlencode }}/enable"
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')">Enable</button>
+    {% endif %}
+    <button class="btn btn-del"
+      hx-delete="/api/mounts/{{ m.name | urlencode }}"
+      hx-confirm="Delete mount &quot;{{ m.name }}&quot;? The filesystem stays mounted until the next reboot or manual unmount."
+      hx-swap="none"
+      hx-on::after-request="htmx.trigger('#mounts-grid','refresh')">✕</button>
+  </div>
+</div>

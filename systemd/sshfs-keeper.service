@@ -1,0 +1,18 @@
+[Unit]
+Description=sshfs-keeper — SSHFS mount monitor and auto-healer
+Documentation=https://github.com/youruser/sshfs-keeper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/sshfs-keeper
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sshfs-keeper
+
+[Install]
+WantedBy=default.target
