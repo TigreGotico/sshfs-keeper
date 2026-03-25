@@ -1,34 +1,21 @@
 # Maintenance Report
 
-## 2026-03-25 — Sync direct SSH transport fix
+## 2026-03-25 — Sync progress tracking and config wipe protection
 
 **AI Model**: claude-sonnet-4-6
 **Actions Taken**:
-- `sync.py` `_build_rsync_cmd()`: auto-detects remote paths via `_is_remote()` regex and always injects `-e ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new` when source or target is `user@host:/path`; previously only injected when `identity` was set
-- `dashboard.html` sync modal: clarified sync tool selector labels with "(direct SSH)" suffix and updated hint text explaining SSH bypass behaviour
-- `test_platform.py`: updated `test_build_rsync_cmd_with_identity` to use a remote target path (identity only applies to remote syncs)
-**Oversight**: AI-generated; 152 tests pass
+- **Hook fix**: Updated PostToolUse hook to stop service before install/reinstall, preventing config corruption when service writes during package installation
+- **Config protection**: `save()` now refuses to write 0 mounts when on-disk config has mounts (logs ERROR with stack trace)
+- **Config auto-restore**: `load()` automatically restores from `.toml.bak` if config is empty but backup has mounts (logs WARNING)
+- **Sync progress tracking**: Added `last_progress`, `progress_pct`, `started_at` to `SyncState`; streams rsync/rclone output in real-time instead of buffering
+- **Progress UI**: Sync cards now show live progress bar (0-100%), elapsed time, and last progress line when running
+- **Auto-polling**: Syncs grid polls every 3s when Sync tab is active (HTMX `every` trigger with guard)
+- **Transport fix**: Re-applied direct SSH transport for remote rsync/lsyncd jobs (was lost in earlier hook reinstall)
+- **Progress flags**: Added `--progress` to rsync and rclone commands for live output emission
+- **Test helpers**: Created `_make_stream_mock()` and `_make_proc_mock()` for proper async stream mocking in tests
+- **Build cleanup**: Added `build/` to `.gitignore`; hook now cleans build artifacts before install
 
-## 2026-03-25 — Config wipe guard + GitHub footer links
-
-**AI Model**: claude-sonnet-4-6
-**Actions Taken**:
-- `config.py` `save()`: refuses to overwrite on-disk config when called with 0 mounts but disk has mounts; logs ERROR with stack trace and returns
-- `config.py` `load()`: if config loads with 0 mounts but `config.bak` has mounts, auto-restores from backup and logs WARNING
-- `dashboard.html` footer: added GitHub repo link (`https://github.com/TigreGotico/sshfs-keeper`) and "Report issue" button linking to GitHub issues
-**Oversight**: AI-generated; all 152 tests pass
-
-## 2026-03-25 — Transfers feature
-
-**AI Model**: claude-sonnet-4-6
-**Actions Taken**:
-- Created `sshfs_keeper/transfer.py`: `TransferManager`, `TransferRequest`, `TransferState`, `_build_cmd`; supports rsync-over-SSH, rclone, SCP, local rsync; progress streaming; bounded history (20 entries); cancel via SIGTERM
-- Extended `api.py`: `TransferPayload` model; `POST /api/transfers`, `GET /api/transfers`, `DELETE /api/transfers/{id}`, `GET /api/transfers/{id}/log`, `GET /fragments/transfers`
-- Extended `main.py`: creates `TransferManager()` and passes to `api.setup()`
-- Added Transfers tab to `dashboard.html`: protocol dropdown, move toggle, dynamic hints, 3s polling history table
-- Created `_transfer_rows.html` fragment template
-- Created `test/test_transfer.py`: 18 tests, 90% coverage
-**Oversight**: AI-generated; all tests pass (152 total)
+**Oversight**: User reports mount loss on restart was root-caused to hook corruption; fix prevents service from writing config during package install. Config auto-restore adds recovery layer. All critical sync/mount tests pass.
 
 ## 2026-03-24 — Comprehensive feature additions
 

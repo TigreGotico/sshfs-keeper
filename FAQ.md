@@ -1,26 +1,5 @@
 # sshfs-keeper FAQ
 
-## How do I transfer files between hosts efficiently?
-
-Use the **Transfers tab** in the web UI, or `POST /api/transfers`.
-
-- **rsync (SSH)** — best for SSH servers: delta sync (only changed bytes), resumes after interruption, checksummed. Requires `rsync` on both ends.
-- **rclone** — for cloud storage, FTP, WebDAV, SMB, S3, etc. Requires `rclone` installed.
-- **SCP** — simplest SSH copy; no delta, no resume. Fine for small one-off files.
-- **Local** — between two local paths (e.g., between SSHFS-mounted folders). Uses rsync without SSH overhead.
-
-Why not just copy through an SSHFS mount? Data traverses two FUSE layers (30-50% overhead), and if the mount goes stale mid-transfer the failure is silent. Direct protocols are faster and safer.
-
-**API example — start a transfer:**
-```bash
-curl -s -X POST http://localhost:8765/api/transfers \
-  -H 'Content-Type: application/json' \
-  -d '{"protocol":"rsync_ssh","source":"user@host:/data","dest":"/mnt/backup","move":false}'
-```
-
-Transfer IDs are short hex strings (e.g. `a1b2c3d4`). Use `GET /api/transfers/{id}/log` to see output.
-
-
 ## How do I get notified when a mount fails?
 
 Set `webhook_url` in `[notifications]`. Any HTTP POST endpoint works: Slack incoming webhooks, Discord webhooks, ntfy.sh topic URLs, etc.
@@ -72,17 +51,20 @@ sshfs-keeper reload
 
 Sends SIGHUP to the running daemon. Adds new mounts, removes deleted ones; preserves runtime state (retry counts, backoff) for existing mounts.
 
-## When should I use sshfs vs rclone for a mount?
+## What prevents my mounts from being wiped?
 
-**Use sshfs** for SSH hosts on a stable LAN or wired connection. It's lower latency and requires no extra setup — ideal for interactive access, editing files in place, or running local tools against remote data.
+Two defensive layers protect your config from accidental data loss:
 
-**Use rclone** when:
-- The connection is unstable (WiFi, VPN, internet). sshfs holds a single persistent SSH connection — if it drops, the entire mount freezes and any process with an open file handle hangs until the kernel times out. sshfs-keeper will remount, but hung processes still need to be killed. rclone issues each file operation as an independent request, so a blip causes that operation to fail/retry rather than stalling everything.
-- The remote is cloud storage, FTP, WebDAV, or SMB — sshfs only supports SSH.
-- You're on macOS or Windows (sshfs is painful to set up outside Linux).
-- Any mount where a hung process would be painful (database files, build outputs).
+1. **save() guard** — If code calls `save()` with 0 mounts but the on-disk config has mounts, the write is refused. An ERROR is logged with the stack trace. This prevents bugs or half-installed package code from overwriting your config.
 
-**Quick rule:** stable LAN → sshfs. WiFi / VPN / internet / NAS → rclone.
+2. **load() auto-restore** — If the config file contains 0 mounts but the backup (`config.toml.bak`) has mounts, the daemon automatically restores from backup at startup and logs a WARNING.
+
+**Why this matters**: During package reinstall, if the service writes config using broken/partially-installed code, it could write an empty config. The hook now stops the service before install/reinstall, and these guards catch issues if something still goes wrong.
+
+Check logs if you see `[ERROR]` in the config load output:
+```bash
+journalctl --user -u sshfs-keeper -n 20 | grep -i "wipe\|restore\|guard"
+```
 
 ## How do I use rclone instead of sshfs for a mount?
 
@@ -97,12 +79,6 @@ mount_tool = "rclone"
 ```
 
 rclone must be installed and `--allow-other` must be permitted in `/etc/fuse.conf`. This is the recommended backend for macOS and Windows (requires WinFsp).
-
-## Do sync jobs transfer via the SSHFS mount or direct SSH?
-
-Direct SSH — rsync and lsyncd jobs always transfer data directly over SSH, bypassing the FUSE mount entirely. This means sync works even when the mount is stale or temporarily unavailable, and avoids the 30–50% FUSE overhead.
-
-When source or target is a remote path (`user@host:/path`), sshfs-keeper automatically injects `-e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"` into the rsync command. For rclone jobs the SFTP backend connects directly to the SSH server.
 
 ## How do I use lsyncd for real-time sync?
 
@@ -142,13 +118,15 @@ The `fail_count` is exposed in `GET /api/syncs` (snapshot) so the dashboard can 
 
 ## How do I view rsync output for a sync job?
 
-Click the **📋 Log** button on a sync card in the web UI, or:
+While a sync is running, the sync card shows a live progress bar (0-100%), elapsed time, and the most recent progress line (e.g. "transferred 42% — 123.4M" from rsync).
+
+After the sync completes, click the **📋 Log** button on a sync card in the web UI, or:
 
 ```bash
 curl http://localhost:8765/api/syncs/<name>/log
 ```
 
-Returns the last 50 lines of stdout+stderr from the most recent run.
+Returns the last 50 lines of stdout+stderr from the most recent run. The Sync tab auto-refreshes every 3 seconds while active so progress updates live.
 
 ## How do I see disk usage on mount cards?
 
@@ -190,17 +168,6 @@ After `max_retries` consecutive failures (default: 3), the sync manager applies 
 
 ## Why does /api/syncs return an object not a list?
 `GET /api/syncs` returns `{"syncs": [...]}` (not a bare list). The earlier bare-list variant was a duplicate route that was silently shadowed by FastAPI — it has been removed.
-
-## What prevents `save()` from wiping my mounts?
-
-Two defensive layers since commit 2524e53:
-
-1. **`save()` guard** — if `save()` is called with 0 mounts while the on-disk config already contains mounts, it logs an ERROR with a full stack trace and **returns without writing**. This prevents a transient empty `AppConfig` from overwriting a healthy config.
-2. **`load()` auto-restore** — if `load()` reads 0 mounts from `config.toml` but `config.bak` has mounts, it automatically copies the backup back to `config.toml` and logs a WARNING before returning the recovered config.
-
-If you see these log lines it means the guard triggered:
-- `ERROR … save() called with 0 mounts but on-disk config has N mounts — refusing to overwrite`
-- `WARNING … Config at … has 0 mounts but backup has N mounts — auto-restoring from …`
 
 ## Why do my mounts disappear after a daemon restart?
 
