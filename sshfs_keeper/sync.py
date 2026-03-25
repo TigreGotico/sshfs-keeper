@@ -298,6 +298,7 @@ class SyncManager:
                 "run_count": s.run_count,
                 "fail_count": s.fail_count,
                 "sync_tool": s.config.sync_tool,
+                "targets": s.config.targets,
                 "next_run_in": max(0.0, s._next_run - now) if s.config.enabled else None,
                 "last_progress": s.last_progress,
                 "progress_pct": s.progress_pct,
