@@ -9,3 +9,4 @@ dist/
 htmlcov/
 /build/
 /uv.lock
+__pycache__/
