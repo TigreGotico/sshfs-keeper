@@ -1,6 +1,12 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)
 ![Status: Beta](https://img.shields.io/badge/status-beta-yellow)
+![Vibe Coded](https://img.shields.io/badge/vibe%20coded-%F0%9F%A4%96-blueviolet)
+
+> **WARNING:** This software was vibe-coded with AI assistance and has not been reviewed by humans.
+> It may contain bugs, bad ideas, and code that was written at 2am by a language model with no skin in the game.
+> No warranty. No guarantee. Might explode. Use at your own risk.
+> The authors accept no liability for lost data, unmounted drives, confused NAS devices, or existential dread.
 
 # sshfs-keeper
 
