@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); if echo \"$file\" | grep -q '/sshfs-keeper/'; then cd /home/miro/PycharmProjects/sshfs-keeper && systemctl --user stop sshfs-keeper 2>/dev/null; sleep 1; rm -rf build/ dist/ *.egg-info && uv tool install --force . --no-cache && systemctl --user start sshfs-keeper 2>/dev/null; fi || true",
+            "timeout": 60,
+            "statusMessage": "Reinstalling sshfs-keeper…"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -56,6 +56,12 @@ class SyncState:
     """Consecutive failure count; resets to 0 on success."""
     last_output: list[str] = field(default_factory=list, repr=False)
     """Last ``_MAX_OUTPUT_LINES`` lines of rsync stdout+stderr from the most recent run."""
+    last_progress: str = ""
+    """Most recent progress line (contains ``%`` or file transfer info)."""
+    progress_pct: Optional[int] = None
+    """Extracted integer percentage (0-100) from the last progress line, if available."""
+    started_at: Optional[float] = None
+    """Unix timestamp when the current run started (``None`` when idle)."""
     _next_run: float = field(default=0.0, repr=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
@@ -64,7 +70,7 @@ _REMOTE_RE = re.compile(r"^[^/][^:]*:")
 
 
 def _is_remote(path: str) -> bool:
-    """Return True if *path* looks like a remote rsync path (user@host:/…)."""
+    """Return True if *path* looks like a remote rsync path (``user@host:/…``)."""
     return bool(_REMOTE_RE.match(path))
 
 
@@ -75,13 +81,16 @@ def _build_rsync_cmd(cfg: "SyncConfig") -> list[str]:  # type: ignore[name-defin
     when either source or target is a remote path, so rsync always transfers
     directly over SSH rather than going through the FUSE mount.
 
+    Adds ``--progress`` so that per-file transfer lines are emitted for live
+    progress tracking.
+
     Args:
         cfg: Sync job configuration.
 
     Returns:
         Argument list suitable for :func:`asyncio.create_subprocess_exec`.
     """
-    cmd = ["rsync"] + cfg.options.split()
+    cmd = ["rsync"] + cfg.options.split() + ["--progress"]
     if _is_remote(cfg.source) or _is_remote(cfg.target):
         ssh = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
         if cfg.identity:
@@ -171,7 +180,8 @@ def _build_rclone_sync_cmd(cfg: "SyncConfig") -> list[str]:  # type: ignore[name
         "rclone", "sync",
         source, target,
         "--stats-one-line",
-        "--stats", "0",
+        "--stats", "2s",
+        "--progress",
     ]
     if cfg.identity:
         cmd += ["--sftp-key-file", cfg.identity]
@@ -288,6 +298,9 @@ class SyncManager:
                 "fail_count": s.fail_count,
                 "sync_tool": s.config.sync_tool,
                 "next_run_in": max(0.0, s._next_run - now) if s.config.enabled else None,
+                "last_progress": s.last_progress,
+                "progress_pct": s.progress_pct,
+                "started_at": s.started_at,
             }
             for s in self.states.values()
         ]
@@ -324,16 +337,63 @@ class SyncManager:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=3600)
+                state.started_at = start
+                state.last_progress = ""
+                state.progress_pct = None
+                state.last_output = []
+                stdout_lines: list[str] = []
+                stderr_lines: list[str] = []
+
+                async def _drain(stream: asyncio.StreamReader, dest: list[str]) -> None:
+                    """Read stream chunks, split on \\n and \\r, update progress live."""
+                    buf = b""
+                    while True:
+                        chunk = await stream.read(4096)
+                        if not chunk:
+                            break
+                        buf += chunk
+                        while b"\n" in buf or b"\r" in buf:
+                            idx_n = buf.find(b"\n")
+                            idx_r = buf.find(b"\r")
+                            if idx_n == -1:
+                                idx = idx_r
+                            elif idx_r == -1:
+                                idx = idx_n
+                            else:
+                                idx = min(idx_n, idx_r)
+                            line = buf[:idx].decode(errors="replace").strip()
+                            buf = buf[idx + 1:]
+                            if not line:
+                                continue
+                            dest.append(line)
+                            state.last_output.append(line)
+                            if len(state.last_output) > _MAX_OUTPUT_LINES:
+                                state.last_output.pop(0)
+                            if "%" in line or "xfr#" in line or "Transferred" in line:
+                                state.last_progress = line
+                                pct_m = re.search(r"(\d+)%", line)
+                                if pct_m:
+                                    state.progress_pct = int(pct_m.group(1))
+                    if buf.strip():
+                        line = buf.decode(errors="replace").strip()
+                        dest.append(line)
+                        state.last_output.append(line)
+                        if len(state.last_output) > _MAX_OUTPUT_LINES:
+                            state.last_output.pop(0)
+
+                assert proc.stdout is not None
+                assert proc.stderr is not None
+                await asyncio.wait_for(
+                    asyncio.gather(_drain(proc.stdout, stdout_lines), _drain(proc.stderr, stderr_lines)),
+                    timeout=3600,
+                )
+                await proc.wait()
                 duration = time.time() - start
 
-                combined = (stdout.decode() + stderr.decode()).strip()
-                all_lines = combined.splitlines()
-                state.last_output = all_lines[-_MAX_OUTPUT_LINES:]
-
                 if proc.returncode in _SOFT_EXIT_CODES:
+                    combined_stdout = "\n".join(stdout_lines)
                     parser = _parse_rclone_stats if cfg.sync_tool == "rclone" else _parse_stats
-                    bytes_sent, files_xfr = parser(stdout.decode())
+                    bytes_sent, files_xfr = parser(combined_stdout)
                     state.status = SyncStatus.OK
                     state.last_error = None
                     state.bytes_sent = bytes_sent
@@ -341,8 +401,9 @@ class SyncManager:
                     state.fail_count = 0
                     log.info("[sync:%s] done in %.1fs — %s file(s)", cfg.name, duration, files_xfr)
                 else:
+                    last_err = stderr_lines[-1] if stderr_lines else f"exit {proc.returncode}"
                     state.status = SyncStatus.FAILED
-                    state.last_error = stderr.decode().strip().splitlines()[-1] if stderr else f"exit {proc.returncode}"
+                    state.last_error = last_err
                     state.fail_count += 1
                     log.warning("[sync:%s] failed (exit %d): %s", cfg.name, proc.returncode, state.last_error)
 
@@ -361,6 +422,7 @@ class SyncManager:
                 state.fail_count += 1
                 log.warning("[sync:%s] error: %s", cfg.name, exc)
             finally:
+                state.started_at = None
                 # Clean up lsyncd temp config file
                 if _tmp:
                     import os as _os

@@ -1,13 +1,10 @@
-.claude/settings.json
 __pycache__/
 *.py[cod]
 *.pyo
 .venv/
 dist/
+build/
 *.egg-info/
 .pytest_cache/
 .coverage
 htmlcov/
-/build/
-/uv.lock
-__pycache__/

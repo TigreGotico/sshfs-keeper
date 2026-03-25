@@ -12,7 +12,19 @@
     </span></div>
     {% if s.files_transferred is not none %}<div class="row"><span class="lbl">Files</span><span class="val" style="font-family:inherit">{{ s.files_transferred }} transferred</span></div>{% endif %}
     {% if s.bytes_sent is not none %}<div class="row"><span class="lbl">Sent</span><span class="val" style="font-family:inherit">{{ (s.bytes_sent / 1048576)|round(1) }} MB</span></div>{% endif %}
+    {% if s.status == 'running' %}
+    <div class="row"><span class="lbl">Elapsed</span><span class="val" style="font-family:inherit">{{ ((now - s.started_at)|int) if s.started_at else 0 }}s</span></div>
+    <div style="margin:0.4rem 0">
+      <div style="background:var(--card-border,#334155);border-radius:4px;height:8px;overflow:hidden">
+        <div style="background:var(--accent,#60a5fa);height:100%;width:{{ s.progress_pct or 0 }}%;transition:width 0.3s ease"></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--dimmed);margin-top:0.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.last_progress }}">
+        {% if s.progress_pct is not none %}{{ s.progress_pct }}% — {% endif %}{{ s.last_progress[:60] if s.last_progress else 'starting…' }}
+      </div>
+    </div>
+    {% else %}
     {% if s.next_run_in is not none and s.next_run_in > 0 %}<div class="row"><span class="lbl">Next run</span><span class="val" style="font-family:inherit">in {{ s.next_run_in|int }}s</span></div>{% endif %}
+    {% endif %}
     {% if s.last_error %}<div class="err-msg">✖ {{ s.last_error }}</div>{% endif %}
   </div>
   <div class="card-footer">

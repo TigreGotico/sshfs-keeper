@@ -93,30 +93,27 @@ class AppConfig:
     def save(self) -> None:
         """Write the current config back to disk as TOML."""
         import traceback as _tb
+
+        # Guard against wiping mounts: refuse to save 0 mounts if disk has mounts
         if not self.mounts:
-            # Check whether the on-disk config already has mounts; if so,
-            # refuse to overwrite it with an empty list — this prevents a
-            # bug where a transient empty AppConfig wipes a healthy config.
-            _disk_path = self._path
-            if _disk_path is None:
-                for _c in CONFIG_SEARCH_PATHS:
-                    if _c.exists():
-                        _disk_path = _c
+            path = self._path
+            if path is None:
+                for candidate in CONFIG_SEARCH_PATHS:
+                    if candidate.exists():
+                        path = candidate
                         break
-            if _disk_path is not None and _disk_path.exists():
+            if path and path.exists():
                 try:
-                    with open(_disk_path, "rb") as _fh:
+                    with open(path, "rb") as _fh:
                         _raw = tomllib.load(_fh)
                     if _raw.get("mount"):
                         log.error(
-                            "save() called with 0 mounts but on-disk config has %d mounts — "
-                            "refusing to overwrite. Stack:\n%s",
-                            len(_raw["mount"]),
-                            "".join(_tb.format_stack()),
+                            "save() called with 0 mounts but on-disk config at %s has %d mount(s) — refusing to overwrite! Stack:\n%s",
+                            path, len(_raw["mount"]), "".join(_tb.format_stack()),
                         )
                         return
-                except Exception as _e:
-                    log.warning("save() 0-mount guard: could not read on-disk config: %s", _e)
+                except Exception as e:
+                    log.warning("Could not check on-disk config during save guard: %s", e)
             log.warning(
                 "save() called with 0 mounts — stack:\n%s",
                 "".join(_tb.format_stack()),
@@ -284,28 +281,24 @@ class AppConfig:
         mounts = [MountConfig(**m) for m in raw.get("mount", [])]
         syncs = [SyncConfig(**s) for s in raw.get("sync", [])]
 
-        # If the file loaded with 0 mounts, check config.bak for a recovery
+        # Auto-restore from backup if config was wiped but backup has mounts
         if not mounts:
-            bak = path.with_suffix(".bak")
-            if bak.exists():
+            bak_path = path.with_suffix(".toml.bak")
+            if bak_path.exists():
                 try:
-                    with open(bak, "rb") as _fh:
-                        _braw = tomllib.load(_fh)
-                    _bak_mounts = _braw.get("mount", [])
-                    if _bak_mounts:
+                    with open(bak_path, "rb") as fh:
+                        bak_raw = tomllib.load(fh)
+                    bak_mounts = [MountConfig(**m) for m in bak_raw.get("mount", [])]
+                    if bak_mounts:
                         log.warning(
-                            "Config at %s has 0 mounts but backup has %d mounts — "
-                            "auto-restoring from %s",
-                            path,
-                            len(_bak_mounts),
-                            bak,
+                            "Config at %s was wiped (0 mounts) but backup has %d mount(s) — auto-restoring",
+                            path, len(bak_mounts),
                         )
                         import shutil as _shutil
-                        _shutil.copy2(bak, path)
-                        mounts = [MountConfig(**m) for m in _bak_mounts]
-                        syncs = syncs or [SyncConfig(**s) for s in _braw.get("sync", [])]
-                except Exception as _e:
-                    log.warning("load() auto-restore from backup failed: %s", _e)
+                        _shutil.copy2(bak_path, path)
+                        mounts = bak_mounts
+                except Exception as e:
+                    log.error("Failed to restore from backup: %s", e)
 
         obj = cls(daemon=daemon, api=api, notifications=notifications, mounts=mounts, syncs=syncs)
         obj._path = path

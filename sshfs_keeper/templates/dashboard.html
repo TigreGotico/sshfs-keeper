@@ -24,9 +24,9 @@
       /* text */
       --text:    #e2e8f0;
       --text2:   #cbd5e1;
-      --label:   #a8bacb;
-      --muted:   #7e95aa;
-      --dimmed:  #637d90;
+      --label:   #94a3b8;
+      --muted:   #64748b;
+      --dimmed:  #475569;
       /* accent */
       --accent:       #1d4ed8;
       --accent-fg:    #ffffff;
@@ -58,7 +58,7 @@
     /* ---- Monokai ---- */
     body.theme-monokai {
       --bg:      #272822; --surface: #3e3d32; --input: #1e1f1c; --border: #4a4a3d;
-      --text:    #f8f8f2; --text2: #e2dfc0; --label: #cfcdb8; --muted: #a6a090; --dimmed: #8a8678;
+      --text:    #f8f8f2; --text2: #e2dfc0; --label: #a6a090; --muted: #75715e; --dimmed: #5c5849;
       --accent:  #a6e22e; --accent-fg: #272822;
       --success: #3d7a1e; --success-fg: #a6e22e;
       --danger:  #8c1c2c; --danger-fg: #f92672;
@@ -80,7 +80,7 @@
     /* ---- Dracula ---- */
     body.theme-dracula {
       --bg:      #282a36; --surface: #44475a; --input: #21222c; --border: #6272a4;
-      --text:    #f8f8f2; --text2: #e2e2e2; --label: #caa9fa; --muted: #8d9bbd; --dimmed: #7282a8;
+      --text:    #f8f8f2; --text2: #e2e2e2; --label: #bd93f9; --muted: #6272a4; --dimmed: #44475a;
       --accent:  #bd93f9; --accent-fg: #282a36;
       --success: #1a6640; --success-fg: #50fa7b;
       --danger:  #7a1a1a; --danger-fg: #ff5555;
@@ -102,7 +102,7 @@
     /* ---- Nord ---- */
     body.theme-nord {
       --bg:      #2e3440; --surface: #3b4252; --input: #242933; --border: #4c566a;
-      --text:    #eceff4; --text2: #d8dee9; --label: #9bbad4; --muted: #7b96b2; --dimmed: #6a839e;
+      --text:    #eceff4; --text2: #d8dee9; --label: #81a1c1; --muted: #4c566a; --dimmed: #434c5e;
       --accent:  #81a1c1; --accent-fg: #2e3440;
       --success: #2d5a27; --success-fg: #a3be8c;
       --danger:  #6a2020; --danger-fg: #bf616a;
@@ -124,7 +124,7 @@
     /* ---- Gruvbox ---- */
     body.theme-gruvbox {
       --bg:      #282828; --surface: #3c3836; --input: #1d2021; --border: #504945;
-      --text:    #ebdbb2; --text2: #d5c4a1; --label: #c6b99a; --muted: #b0a08a; --dimmed: #968778;
+      --text:    #ebdbb2; --text2: #d5c4a1; --label: #a89984; --muted: #928374; --dimmed: #7c6f64;
       --accent:  #458588; --accent-fg: #ebdbb2;
       --success: #3a5c1a; --success-fg: #b8bb26;
       --danger:  #6a1a1a; --danger-fg: #fb4934;
@@ -145,8 +145,8 @@
 
     /* ---- Solarized Dark ---- */
     body.theme-solarized {
-      --bg:      #002b36; --surface: #073642; --input: #01181f; --border: #2a6475;
-      --text:    #e8f0f0; --text2: #c5d4d4; --label: #93b3b8; --muted: #7a9fa8; --dimmed: #628a94;
+      --bg:      #002b36; --surface: #073642; --input: #01181f; --border: #124d5d;
+      --text:    #839496; --text2: #93a1a1; --label: #657b83; --muted: #586e75; --dimmed: #4a5d64;
       --accent:  #268bd2; --accent-fg: #fdf6e3;
       --success: #1a5c27; --success-fg: #859900;
       --danger:  #6a1a1a; --danger-fg: #dc322f;
@@ -190,13 +190,12 @@
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.2s, color 0.2s; }
 
     /* ---- layout ---- */
-    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.9rem 2rem; display: flex; align-items: center; gap: 1rem; }
-    .page-wrap { max-width: 1400px; margin: 0 auto; padding: 0 2rem; width: 100%; box-sizing: border-box; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
     header h1 { font-size: 1.15rem; font-weight: 700; }
     .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
     .hdr-right label { font-size: 0.8rem; color: var(--muted); }
     select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-    main { padding: 1.5rem 0; }
+    main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 
     /* ---- tabs ---- */
     .tabs { display: flex; gap: 0.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
@@ -252,7 +251,7 @@
     .add-btn-row { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
 
     /* ---- settings panel ---- */
-    .settings-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; display: grid; gap: 0.75rem; }
+    .settings-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; max-width: 480px; display: grid; gap: 0.75rem; }
     .settings-form label { font-size: 0.8rem; color: var(--label); display: block; margin-bottom: 0.2rem; }
     .settings-form input { width: 100%; background: var(--input); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 5px; font-size: 0.85rem; }
     .settings-form select { width: 100%; }
@@ -261,11 +260,11 @@
     .settings-form input[type=number] { width: auto; display: inline; }
 
     /* ---- keys panel ---- */
-    .keys-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .keys-list { display: flex; flex-direction: column; gap: 0.5rem; max-width: 560px; }
     .key-row { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.6rem 0.9rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; font-family: monospace; }
     .key-row .key-name { flex: 1; color: var(--text2); }
     .key-row .key-path { font-size: 0.72rem; color: var(--dimmed); }
-    .upload-box { margin-top: 1rem; background: var(--surface); border: 2px dashed var(--border); border-radius: 10px; padding: 1.5rem; text-align: center; font-size: 0.85rem; color: var(--muted); cursor: pointer; transition: border-color 0.2s; }
+    .upload-box { margin-top: 1rem; background: var(--surface); border: 2px dashed var(--border); border-radius: 10px; padding: 1.5rem; max-width: 560px; text-align: center; font-size: 0.85rem; color: var(--muted); cursor: pointer; transition: border-color 0.2s; }
     .upload-box:hover, .upload-box.drag { border-color: var(--accent); color: var(--label); }
     .upload-box input[type=file] { display: none; }
 
@@ -313,7 +312,6 @@
 <body hx-ext="sse" sse-connect="/api/events">
 
 <header>
-<div class="page-wrap" style="display:flex;align-items:center;gap:1rem;padding-top:0;padding-bottom:0">
   <h1>⚙ sshfs-keeper</h1>
   <div class="hdr-right">
     <!-- SSE connection indicator: .htmx-sse-open class is added by htmx-ext-sse when connected -->
@@ -328,17 +326,13 @@
       <option value="light">🌕 Light</option>
     </select>
   </div>
-</div>
 </header>
 
 <main>
-<div class="page-wrap">
   <!-- Tabs -->
   <div class="tabs">
     <div class="tab active" onclick="switchTab('mounts')">Mounts</div>
     <div class="tab" onclick="switchTab('syncs')">Sync</div>
-    <div class="tab" onclick="switchTab('transfers')">Transfers</div>
-    <div class="tab" onclick="switchTab('logs');logsInit()">Logs</div>
     <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
     <div class="tab" onclick="switchTab('settings')">Settings</div>
     <div class="tab" onclick="switchTab('notifications')">Notifications</div>
@@ -368,165 +362,12 @@
     </div>
     <div class="grid" id="syncs-grid"
          hx-get="/fragments/syncs"
-         hx-trigger="refresh"
+         hx-trigger="refresh, every 3s [document.getElementById('tab-syncs').classList.contains('active')]"
          hx-swap="innerHTML"
          hx-sync="this:replace"
          hx-indicator="#syncs-indicator">
       {% include "_sync_cards.html" %}
     </div>
-  </div>
-
-  <!-- ===== TRANSFERS TAB ===== -->
-  <div class="tab-panel" id="tab-transfers">
-    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
-      A <strong>transfer</strong> is a one-shot copy or move between two paths — local folders, SSH servers, or rclone remotes.
-      Unlike Sync jobs it runs once immediately and is not repeated on a schedule.
-      For SSH hosts, <strong>rsync (SSH)</strong> is the best choice: it transfers only changed bytes, verifies checksums, and can resume interrupted transfers.
-    </p>
-
-    <!-- New transfer form -->
-    <form id="transfer-form" class="settings-form"
-          hx-post="/api/transfers"
-          hx-ext="json-enc"
-          hx-swap="none"
-          hx-on::after-request="onTransferStarted(event)"
-          style="margin-bottom:1.4rem">
-
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:0.8rem;align-items:start">
-        <div>
-          <label>Protocol</label>
-          <select name="protocol" id="tr-protocol" onchange="applyTransferProtocol()">
-            <option value="rsync_ssh">rsync (SSH) — recommended for SSH hosts</option>
-            <option value="local">Local — between mounted/local paths</option>
-            <option value="rclone">rclone — cloud, FTP, WebDAV, SMB</option>
-            <option value="scp">SCP — simple SSH copy</option>
-          </select>
-          <span class="hint" id="tr-proto-hint">
-            rsync transfers only the bytes that changed (delta), supports resume, and verifies checksums.
-            Best choice for SSH servers, NAS devices, and Raspberry Pis.
-          </span>
-        </div>
-        <div>
-          <label>Mode</label>
-          <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
-            <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="_move_ui" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value='false'"> Copy
-            </label>
-            <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="_move_ui" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value='true'"> Move
-            </label>
-          </div>
-          <span class="hint">Move deletes source files after transfer</span>
-          <input type="hidden" name="move" id="tr-move" value="false">
-        </div>
-      </div>
-
-      <div>
-        <label>Source</label>
-        <div style="display:flex;gap:0.5rem;align-items:center">
-          <input type="text" name="source" id="tr-source"
-                 placeholder="user@host:/path/to/source" autocomplete="off" required style="flex:1;min-width:0">
-          {% if hosts %}
-          <select id="tr-src-host" onchange="applyTransferHost('src')" style="flex:0 0 auto;max-width:200px">
-            <option value="">host…</option>
-            <option value="__local__">📍 local</option>
-            {% for h in hosts %}
-            <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
-            {% endfor %}
-          </select>
-          {% endif %}
-          <button type="button" class="btn" style="flex:0 0 auto;white-space:nowrap" onclick="openFilePicker('src')">📂 Browse</button>
-        </div>
-        <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
-      </div>
-
-      <div>
-        <label>Destination</label>
-        <div style="display:flex;gap:0.5rem;align-items:center">
-          <input type="text" name="dest" id="tr-dest"
-                 placeholder="/mnt/backup/photos" autocomplete="off" required style="flex:1;min-width:0">
-          {% if hosts %}
-          <select id="tr-dst-host" onchange="applyTransferHost('dst')" style="flex:0 0 auto;max-width:200px">
-            <option value="">host…</option>
-            <option value="__local__">📍 local</option>
-            {% for h in hosts %}
-            <option value="{{ h.userhost }}" data-identity="{{ h.identity }}">{{ h.userhost }} ({{ h.name }})</option>
-            {% endfor %}
-          </select>
-          {% endif %}
-          <button type="button" class="btn" style="flex:0 0 auto;white-space:nowrap" onclick="openFilePicker('dst')">📂 Browse</button>
-        </div>
-        <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
-      </div>
-
-      <div id="tr-identity-row">
-        <label>SSH Identity Key <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <select name="identity" id="tr-identity">
-          <option value="">— use default SSH key (~/.ssh/id_ed25519 or id_rsa)</option>
-          {% for k in keys %}
-          <option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>
-          {% endfor %}
-        </select>
-        <span class="hint">Only needed if the target server uses a different key than your default SSH key.</span>
-      </div>
-
-      <details style="margin-top:0.3rem">
-        <summary style="font-size:0.78rem;color:var(--muted);cursor:pointer">Advanced options</summary>
-        <div style="margin-top:0.5rem">
-          <label>Extra flags</label>
-          <input type="text" name="options" id="tr-options" placeholder="e.g. --bwlimit=5M --exclude=.DS_Store" autocomplete="off">
-          <span class="hint">Space-separated flags appended to the command. rsync example: <code>--bwlimit=5M</code> limits bandwidth to 5 MB/s.</span>
-        </div>
-      </details>
-
-      <div class="save-row">
-        <button type="submit" class="btn btn-primary" id="tr-submit-btn">▶ Start Transfer</button>
-        <span id="transfers-indicator" class="htmx-indicator" style="font-size:0.78rem;color:#64748b">starting…</span>
-      </div>
-    </form>
-
-    <!-- Transfer history -->
-    <h3 style="font-size:0.85rem;color:var(--label);margin-bottom:0.6rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Recent Transfers</h3>
-    <div style="overflow-x:auto">
-      <table id="transfers-table" style="width:100%;border-collapse:collapse;font-size:0.85rem">
-        <thead>
-          <tr style="color:var(--label);border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Protocol</th>
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;width:40%">Source → Destination</th>
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Status</th>
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500">Progress</th>
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500;white-space:nowrap">Time</th>
-            <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:500">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="transfers-tbody"
-               hx-get="/fragments/transfers"
-               hx-trigger="refresh, every 3s"
-               hx-swap="innerHTML"
-               hx-indicator="#transfers-indicator">
-          <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ===== LOGS TAB ===== -->
-  <div class="tab-panel" id="tab-logs">
-    <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;flex-wrap:wrap">
-      <h3 style="font-size:0.85rem;color:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0">Daemon Logs</h3>
-      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;cursor:pointer">
-        <input type="checkbox" id="logs-live" onchange="logsToggleLive()" style="accent-color:var(--accent)"> Live tail
-      </label>
-      <span id="logs-live-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite"></span>
-      <button class="btn" style="font-size:0.78rem;padding:0.2rem 0.6rem;margin-left:auto" onclick="logsRefresh()">↺ Refresh</button>
-      <select id="logs-lines" onchange="logsRefresh()" style="font-size:0.78rem;padding:0.2rem 0.4rem;width:auto">
-        <option value="100">100 lines</option>
-        <option value="300" selected>300 lines</option>
-        <option value="500">500 lines</option>
-        <option value="1000">1000 lines</option>
-      </select>
-    </div>
-    <div id="logs-output" class="log-output" style="max-height:60vh;font-size:0.75rem;line-height:1.6">Loading…</div>
   </div>
 
   <!-- ===== SSH KEYS TAB ===== -->
@@ -637,7 +478,6 @@
       </div>
     </form>
   </div>
-</div>
 </main>
 
 <footer style="text-align:center;padding:1.5rem 1rem 2rem;font-size:0.72rem;color:var(--dimmed);border-top:1px solid var(--border);margin-top:2rem;line-height:1.8">
@@ -653,21 +493,7 @@
       Donate via PayPal
     </a>
   </div>
-  <div style="margin-bottom:0.4rem;display:flex;justify-content:center;align-items:center;gap:0.8rem;flex-wrap:wrap">
-    <a href="https://github.com/TigreGotico/sshfs-keeper" target="_blank" rel="noopener"
-       style="display:inline-flex;align-items:center;gap:0.35rem;color:var(--text2);text-decoration:none;font-size:0.74rem;transition:color 0.15s"
-       onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text2)'">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-      GitHub
-    </a>
-    <a href="https://github.com/TigreGotico/sshfs-keeper/issues/new" target="_blank" rel="noopener"
-       style="display:inline-flex;align-items:center;gap:0.35rem;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:0.2rem 0.6rem;color:var(--text2);text-decoration:none;font-size:0.74rem;transition:border-color 0.15s,color 0.15s"
-       onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path fill-rule="evenodd" d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0z"/></svg>
-      Report issue
-    </a>
-  </div>
-  <div>© 2026 <a href="https://tigregotico.pt" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">Tigre Gótico Lda.</a> — sshfs-keeper is open source, licensed under Apache 2.0</div>
+  <div>© 2026 Tigre Gótico Lda. — sshfs-keeper is open source, licensed under Apache 2.0</div>
 </footer>
 
 <!-- ===== ADD / EDIT MOUNT MODAL ===== -->
@@ -723,7 +549,7 @@
           <option value="sshfs">sshfs — fast, low overhead, SSH only</option>
           <option value="rclone">rclone — supports FTP, WebDAV, SMB, S3, cloud storage</option>
         </select>
-        <span class="hint" id="m-tool-hint">sshfs is the default for SSH connections. rclone is required for FTP, WebDAV, SMB, and cloud storage. The Protocol selector above sets this automatically. For unstable networks (WiFi, VPN, internet) prefer rclone even for SSH — a dropped connection freezes a sshfs mount until the kernel times out, while rclone retries each operation independently.</span>
+        <span class="hint" id="m-tool-hint">sshfs is the default for SSH connections. rclone is required for FTP, WebDAV, SMB, and cloud storage. The Protocol selector above sets this automatically.</span>
       </div>
       <div class="field">
         <label>Advanced options <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
@@ -777,11 +603,11 @@
       <div class="field">
         <label>Sync tool</label>
         <select id="s-sync-tool" name="sync_tool">
-          <option value="rsync">rsync (direct SSH) — delta sync over SSH, bypasses FUSE mount (recommended)</option>
-          <option value="lsyncd">lsyncd (direct SSH) — real-time inotify + rsync over SSH (requires lsyncd)</option>
-          <option value="rclone">rclone — S3, GDrive, FTP, WebDAV, or unstable/cloud connections</option>
+          <option value="rsync">rsync — copies only changed files, very efficient (recommended)</option>
+          <option value="lsyncd">lsyncd — watches for file changes and syncs instantly (requires lsyncd)</option>
+          <option value="rclone">rclone — for S3, Google Drive, Dropbox, or cloud storage</option>
         </select>
-        <span class="hint">rsync and lsyncd transfer directly over SSH — not through the FUSE mount — so they work even when the mount is stale. rclone is better for cloud storage or unreliable networks.</span>
+        <span class="hint">rsync is the right choice for most situations. lsyncd reacts to changes in real time instead of waiting for the next scheduled run. rclone is needed for cloud storage.</span>
       </div>
       <div class="field">
         <label>Extra flags <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
@@ -821,32 +647,13 @@
   </div>
 </div>
 
-<!-- ===== FILE PICKER MODAL ===== -->
-<div class="overlay" id="filepicker-overlay" onclick="if(event.target===this)closeFilePicker()">
-  <div class="modal" style="width:min(680px,95vw);max-height:80vh;display:flex;flex-direction:column">
-    <h2 style="margin-bottom:0.3rem">Browse</h2>
-    <div id="fp-breadcrumb" style="font-size:0.78rem;color:var(--dimmed);margin-bottom:0.7rem;word-break:break-all"></div>
-    <div id="fp-error" style="display:none;color:var(--b-error-fg);font-size:0.82rem;margin-bottom:0.5rem"></div>
-    <div id="fp-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:6px;min-height:200px">
-      <div style="padding:2rem;text-align:center;color:var(--dimmed)">Loading…</div>
-    </div>
-    <div style="margin-top:0.7rem;display:flex;gap:0.5rem;align-items:center">
-      <input id="fp-current-path" type="text" style="flex:1;font-family:monospace;font-size:0.82rem" readonly>
-      <button class="btn btn-primary" onclick="confirmFilePicker()">Select</button>
-      <button class="btn btn-muted" onclick="closeFilePicker()">Cancel</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
   // ---- tabs (minimal JS — CSS only alternative would need :target anchors) ----
   function switchTab(name) {
-    document.querySelectorAll('.tab').forEach(t => {
-      const target = t.getAttribute('onclick').match(/switchTab\('(\w+)'\)/)?.[1];
-      t.classList.toggle('active', target === name);
-    });
+    const panels = ['mounts','syncs','keys','settings','notifications'];
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', panels[i] === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   }
 
@@ -909,7 +716,7 @@
       tool: 'sshfs',
       remoteHint: 'Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/media/data</code>. Use the server\'s IP address or hostname.',
       protoHint: 'SSH is the most common choice for Linux servers, NAS devices, and Raspberry Pis. It encrypts your connection automatically and works over your local network or the internet.',
-      toolHint: 'sshfs is the fastest option for SSH hosts on a <strong>stable LAN or wired connection</strong>. For <strong>WiFi, VPN, or internet links</strong> consider rclone — a dropped connection stalls the entire sshfs mount until the kernel times out, while rclone retries each operation independently.',
+      toolHint: 'sshfs is the fastest option for SSH connections and requires no extra configuration.',
     },
     ftp: {
       remote: ':ftp,host=HOST,user=USER,pass=PASS:/path',
@@ -1045,262 +852,6 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closeMountModal(); closeSyncModal(); closeLogModal(); }
   });
-
-  // ---- transfer protocol switcher ----
-  const TRANSFER_PROTO_INFO = {
-    rsync_ssh: {
-      protoHint: 'rsync transfers only the bytes that changed (delta sync), supports resume with <code>--partial</code>, and verifies checksums. Best choice for SSH servers, NAS devices, and Raspberry Pis. Requires <code>rsync</code> installed on both ends.',
-      srcPlaceholder: 'user@host:/path/to/source',
-      srcHint: 'Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code>. Can also be a local path.',
-      dstPlaceholder: '/mnt/backup/photos  or  user@host:/path',
-      dstHint: 'Local path or <code>user@host:/path</code> for a remote destination. Only one end needs to be remote.',
-      showIdentity: true,
-    },
-    local: {
-      protoHint: 'Uses rsync between two local paths — perfect for copying between SSHFS-mounted folders on this machine. Faster than rsync-over-SSH because there is no network overhead.',
-      srcPlaceholder: '/mnt/nas/photos',
-      srcHint: 'Local path — e.g. a folder inside one of your SSHFS mounts.',
-      dstPlaceholder: '/mnt/backup/photos',
-      dstHint: 'Another local path — e.g. a folder on a different SSHFS mount or an external drive.',
-      showIdentity: false,
-    },
-    rclone: {
-      protoHint: 'rclone supports S3, Google Drive, Dropbox, FTP, WebDAV, SMB, and 40+ other backends. Use rclone remote syntax: <code>remotename:/path</code> for configured remotes, or inline syntax like <code>:sftp,host=HOST,user=USER:/path</code>.',
-      srcPlaceholder: 'remotename:/path  or  :sftp,host=HOST,user=USER:/data',
-      srcHint: 'rclone remote syntax. Run <code>rclone listremotes</code> to see configured remotes.',
-      dstPlaceholder: '/mnt/local  or  s3remote:/bucket/backup',
-      dstHint: 'Destination in rclone syntax. Can be local or any configured rclone remote.',
-      showIdentity: true,
-    },
-    scp: {
-      protoHint: 'SCP is the simplest SSH copy tool — no delta, no resume. Fine for small files. For large or repeated transfers use rsync (SSH) instead.',
-      srcPlaceholder: 'user@host:/path/to/file',
-      srcHint: 'Local path or <code>user@host:/path</code>. Copies the whole file every time.',
-      dstPlaceholder: '/local/destination/',
-      dstHint: 'Local destination path or <code>user@host:/path</code>.',
-      showIdentity: true,
-    },
-  };
-
-  function applyTransferProtocol() {
-    const proto = document.getElementById('tr-protocol').value;
-    const info = TRANSFER_PROTO_INFO[proto];
-    if (!info) return;
-    document.getElementById('tr-proto-hint').innerHTML = info.protoHint;
-    document.getElementById('tr-source').placeholder = info.srcPlaceholder;
-    document.getElementById('tr-source-hint').innerHTML = info.srcHint;
-    document.getElementById('tr-dest').placeholder = info.dstPlaceholder;
-    document.getElementById('tr-dest-hint').innerHTML = info.dstHint;
-    document.getElementById('tr-identity-row').style.display = info.showIdentity ? '' : 'none';
-  }
-  applyTransferProtocol();
-
-  function applyTransferHost(which) {
-    const selId = which === 'dst' ? 'tr-dst-host' : 'tr-src-host';
-    const fieldId = which === 'dst' ? 'tr-dest' : 'tr-source';
-    const sel = document.getElementById(selId);
-    if (!sel || !sel.value) return;
-    const el = document.getElementById(fieldId);
-    if (sel.value === '__local__') {
-      el.value = '/';
-    } else {
-      el.value = sel.value + ':/';
-    }
-    el.focus();
-    const len = el.value.length;
-    el.setSelectionRange(len, len);
-    // Auto-select identity key from source host selection
-    if (which === 'src' && sel.value !== '__local__') {
-      const identity = sel.selectedOptions[0]?.dataset?.identity || '';
-      const identEl = document.getElementById('tr-identity');
-      if (identEl && identity) {
-        for (const opt of identEl.options) {
-          if (opt.value === identity) { opt.selected = true; break; }
-        }
-      }
-    }
-  }
-
-  function onTransferStarted(event) {
-    if (event.detail.successful) {
-      document.getElementById('tr-source').value = '';
-      document.getElementById('tr-dest').value = '';
-      document.getElementById('tr-copy').checked = true;
-      document.getElementById('tr-move').value = 'false';
-      const s = document.getElementById('tr-src-host');
-      const d = document.getElementById('tr-dst-host');
-      if (s) s.selectedIndex = 0;
-      if (d) d.selectedIndex = 0;
-      htmx.trigger('#transfers-tbody', 'refresh');
-    }
-  }
-
-  function openTransferLog(id) {
-    const overlay = document.getElementById('log-overlay');
-    const title = document.getElementById('log-modal-title');
-    const output = document.getElementById('log-content');
-    title.textContent = `Transfer ${id} — output`;
-    output.textContent = 'Loading…';
-    overlay.classList.add('open');
-    fetch(`/api/transfers/${id}/log`)
-      .then(r => r.json())
-      .then(d => { output.textContent = (d.lines || []).join('\n') || '(no output yet)'; })
-      .catch(() => { output.textContent = 'Failed to load output.'; });
-  }
-
-  // ---- file picker ----
-  let _fp_target = 'src';   // 'src' or 'dst'
-  let _fp_path = '/';
-  let _fp_host = '';
-  let _fp_identity = '';
-
-  function openFilePicker(which) {
-    _fp_target = which;
-    // Determine host + identity from the matching host dropdown or current field value
-    const hostSel = document.getElementById(which === 'src' ? 'tr-src-host' : 'tr-dst-host');
-    const rawHost = hostSel ? hostSel.value : '';
-    _fp_host = (rawHost && rawHost !== '__local__') ? rawHost : '';
-    _fp_identity = _fp_host ? (hostSel?.selectedOptions[0]?.dataset?.identity || '') : '';
-    // Start at current field value path if it looks like an absolute path
-    const fieldVal = document.getElementById(which === 'src' ? 'tr-source' : 'tr-dest').value;
-    const colonIdx = fieldVal.indexOf(':/');
-    const rawPath = colonIdx >= 0 ? fieldVal.slice(colonIdx + 1) : fieldVal;
-    _fp_path = (rawPath.startsWith('/') ? rawPath : '/');
-    document.getElementById('filepicker-overlay').classList.add('open');
-    fpLoad(_fp_path);
-  }
-
-  function closeFilePicker() {
-    document.getElementById('filepicker-overlay').classList.remove('open');
-  }
-
-  function confirmFilePicker() {
-    const path = document.getElementById('fp-current-path').value;
-    const fieldId = _fp_target === 'src' ? 'tr-source' : 'tr-dest';
-    document.getElementById(fieldId).value = _fp_host ? `${_fp_host}:${path}` : path;
-    closeFilePicker();
-  }
-
-  function fpLoad(path) {
-    document.getElementById('fp-error').style.display = 'none';
-    document.getElementById('fp-list').innerHTML = '<div style="padding:2rem;text-align:center;color:var(--dimmed)">Loading…</div>';
-    _fp_path = path;
-    document.getElementById('fp-current-path').value = path;
-    fpRenderBreadcrumb(path);
-    const params = new URLSearchParams({path});
-    if (_fp_host) params.set('host', _fp_host);
-    if (_fp_identity) params.set('identity', _fp_identity);
-    fetch('/api/browse?' + params)
-      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.detail || 'Error')))
-      .then(data => fpRenderList(data.path, data.entries))
-      .catch(err => {
-        document.getElementById('fp-error').textContent = String(err);
-        document.getElementById('fp-error').style.display = '';
-        document.getElementById('fp-list').innerHTML = '';
-      });
-  }
-
-  function fpRenderBreadcrumb(path) {
-    const parts = path.split('/').filter(Boolean);
-    const prefix = _fp_host ? `${_fp_host}:` : '📍 local:';
-    let html = `<span style="cursor:pointer;color:var(--accent)" onclick="fpLoad('/')">${prefix}/</span>`;
-    let acc = '';
-    parts.forEach((p, i) => {
-      acc += '/' + p;
-      const cur = acc;
-      if (i < parts.length - 1) {
-        html += ` <span style="color:var(--border)">›</span> <span style="cursor:pointer;color:var(--accent)" onclick="fpLoad('${cur}')">${p}</span>`;
-      } else {
-        html += ` <span style="color:var(--border)">›</span> <strong>${p}</strong>`;
-      }
-    });
-    document.getElementById('fp-breadcrumb').innerHTML = html;
-  }
-
-  function fpRenderList(path, entries) {
-    _fp_path = path;
-    document.getElementById('fp-current-path').value = path;
-    fpRenderBreadcrumb(path);
-    if (!entries.length) {
-      document.getElementById('fp-list').innerHTML = '<div style="padding:2rem;text-align:center;color:var(--dimmed)">(empty directory)</div>';
-      return;
-    }
-    const rows = entries.map(e => {
-      const icon = e.is_dir ? '📁' : '📄';
-      const size = e.size != null ? `<span style="color:var(--dimmed);font-size:0.72rem;margin-left:auto">${fpFmtSize(e.size)}</span>` : '';
-      const click = e.is_dir
-        ? `onclick="fpLoad('${(path + '/' + e.name).replace('//', '/')}')" style="cursor:pointer"`
-        : `onclick="fpSelect('${(path + '/' + e.name).replace('//', '/')}')" style="cursor:pointer"`;
-      return `<div ${click} style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);font-size:0.83rem;transition:background 0.1s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
-        <span>${icon}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name}${e.is_dir ? '/' : ''}</span>${size}
-      </div>`;
-    });
-    // Back entry
-    if (path !== '/') {
-      const parent = path.split('/').slice(0, -1).join('/') || '/';
-      rows.unshift(`<div onclick="fpLoad('${parent}')" style="cursor:pointer;display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;border-bottom:1px solid var(--border);font-size:0.83rem;color:var(--dimmed)" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
-        <span>⬆️</span><span>.. (up)</span>
-      </div>`);
-    }
-    document.getElementById('fp-list').innerHTML = rows.join('');
-  }
-
-  function fpSelect(path) {
-    document.getElementById('fp-current-path').value = path;
-    _fp_path = path;
-    fpRenderBreadcrumb(path);
-  }
-
-  function fpFmtSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
-    if (bytes < 1073741824) return (bytes/1048576).toFixed(1) + ' MB';
-    return (bytes/1073741824).toFixed(1) + ' GB';
-  }
-
-  // ---- logs tab ----
-  let _logsEs = null;
-  let _logsInited = false;
-
-  function logsInit() {
-    _logsInited = true;
-    if (!document.getElementById('logs-live')?.checked) logsRefresh();
-  }
-
-  function logsRefresh() {
-    if (document.getElementById('logs-live')?.checked) return;
-    const n = document.getElementById('logs-lines')?.value || 300;
-    const el = document.getElementById('logs-output');
-    el.textContent = 'Loading…';
-    fetch(`/api/logs?lines=${n}`)
-      .then(r => r.json())
-      .then(d => {
-        el.textContent = (d.lines || []).join('\n') || '(no log output)';
-        el.scrollTop = el.scrollHeight;
-      })
-      .catch(() => { el.textContent = 'Failed to load logs.'; });
-  }
-
-  function logsToggleLive() {
-    const live = document.getElementById('logs-live').checked;
-    const dot = document.getElementById('logs-live-dot');
-    if (live) {
-      dot.style.display = '';
-      const el = document.getElementById('logs-output');
-      el.textContent = '';
-      _logsEs = new EventSource('/api/logs/stream');
-      _logsEs.onmessage = e => {
-        const line = JSON.parse(e.data);
-        el.textContent += line + '\n';
-        el.scrollTop = el.scrollHeight;
-      };
-      _logsEs.onerror = () => { dot.style.background = '#ef4444'; };
-    } else {
-      dot.style.display = 'none';
-      if (_logsEs) { _logsEs.close(); _logsEs = null; }
-      logsRefresh();
-    }
-  }
 </script>
 </body>
 </html>

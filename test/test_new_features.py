@@ -17,6 +17,24 @@ from sshfs_keeper.sync import SyncManager, SyncState, SyncConfig
 # Helpers
 # ------------------------------------------------------------------
 
+def _make_stream_mock(data: bytes) -> asyncio.StreamReader:
+    """Create a real asyncio.StreamReader pre-loaded with *data* for _drain tests."""
+    reader = asyncio.StreamReader()
+    reader.feed_data(data)
+    reader.feed_eof()
+    return reader
+
+
+def _make_proc_mock(returncode: int, stdout: bytes, stderr: bytes) -> AsyncMock:
+    """Build a mock subprocess whose stdout/stderr are real StreamReaders."""
+    mock_proc = AsyncMock()
+    mock_proc.returncode = returncode
+    mock_proc.stdout = _make_stream_mock(stdout)
+    mock_proc.stderr = _make_stream_mock(stderr)
+    mock_proc.wait = AsyncMock()
+    return mock_proc
+
+
 def _make_monitor(notifications: NotificationsConfig | None = None) -> Monitor:
     n = notifications or NotificationsConfig()
     cfg = AppConfig(
@@ -209,11 +227,11 @@ async def test_sync_captures_output() -> None:
     state = SyncState(config=sc)
     sm = SyncManager({"job": state})
 
-    fake_stdout = b"Number of regular files transferred: 5\nTotal bytes sent: 1,234\n"
-    fake_stderr = b""
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 0
-    mock_proc.communicate = AsyncMock(return_value=(fake_stdout, fake_stderr))
+    mock_proc = _make_proc_mock(
+        returncode=0,
+        stdout=b"Number of regular files transferred: 5\nTotal bytes sent: 1,234\n",
+        stderr=b"",
+    )
 
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
         await sm._run_job(state)
@@ -234,9 +252,7 @@ async def test_sync_fail_count_increments() -> None:
     state = SyncState(config=sc)
     sm = SyncManager({"job": state})
 
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 1  # failure
-    mock_proc.communicate = AsyncMock(return_value=(b"", b"some error"))
+    mock_proc = _make_proc_mock(returncode=1, stdout=b"", stderr=b"some error")
 
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
         await sm._run_job(state)
@@ -253,9 +269,11 @@ async def test_sync_fail_count_resets_on_success() -> None:
     state.fail_count = 5
     sm = SyncManager({"job": state})
 
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 0
-    mock_proc.communicate = AsyncMock(return_value=(b"Total bytes sent: 0\nNumber of regular files transferred: 0\n", b""))
+    mock_proc = _make_proc_mock(
+        returncode=0,
+        stdout=b"Total bytes sent: 0\nNumber of regular files transferred: 0\n",
+        stderr=b"",
+    )
 
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
         await sm._run_job(state)
@@ -276,9 +294,7 @@ async def test_sync_backoff_applied_after_max_retries() -> None:
     daemon_cfg = DaemonConfig(max_retries=3, backoff_base=60)
     sm = SyncManager({"job": state}, daemon_cfg=daemon_cfg)
 
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 1
-    mock_proc.communicate = AsyncMock(return_value=(b"", b"err"))
+    mock_proc = _make_proc_mock(returncode=1, stdout=b"", stderr=b"err")
 
     before = _time.time()
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
@@ -301,9 +317,7 @@ async def test_sync_normal_interval_when_below_max_retries() -> None:
     daemon_cfg = DaemonConfig(max_retries=3, backoff_base=60)
     sm = SyncManager({"job": state}, daemon_cfg=daemon_cfg)
 
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 1
-    mock_proc.communicate = AsyncMock(return_value=(b"", b"err"))
+    mock_proc = _make_proc_mock(returncode=1, stdout=b"", stderr=b"err")
 
     before = _time.time()
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
