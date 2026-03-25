@@ -203,6 +203,67 @@ curl -s -X PUT $BASE/api/notifications \
 
 ---
 
+## File transfers
+
+```bash
+# Start a transfer (rsync over SSH)
+curl -s -X POST $BASE/api/transfers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "protocol": "rsync_ssh",
+    "source": "user@host:/data/archive.tar.gz",
+    "dest": "/local/archive.tar.gz"
+  }'
+
+# Start a move (deletes source after copy)
+curl -s -X POST $BASE/api/transfers \
+  -H 'Content-Type: application/json' \
+  -d '{"protocol":"rsync_ssh","source":"/local/old/","dest":"user@host:/archive/","move":true}'
+
+# List all transfers (newest first)
+curl -s $BASE/api/transfers | python3 -m json.tool
+
+# View transfer output/log
+curl -s $BASE/api/transfers/TRANSFER_ID/log
+
+# Cancel a running transfer
+curl -s -X DELETE $BASE/api/transfers/TRANSFER_ID
+
+# Resume a failed/cancelled rsync transfer (uses --partial --append-verify)
+curl -s -X POST $BASE/api/transfers/TRANSFER_ID/resume
+```
+
+**Protocol values:** `rsync_ssh` (recommended), `scp`, `rclone`, `local` (rsync between local paths)
+**Transfer status values:** `running` `done` `failed` `cancelled`
+
+---
+
+## File browser
+
+```bash
+# Browse local directory
+curl -s '$BASE/api/browse?path=/home/user' | python3 -m json.tool
+
+# Browse remote directory via SSH
+curl -s '$BASE/api/browse?path=/data&host=user@server&identity=mykey'
+```
+
+Response: `{"path": "/data", "entries": [{"name": "subdir/", "is_dir": true, "size": null}, {"name": "file.txt", "is_dir": false, "size": 1024}]}`
+
+---
+
+## Logs
+
+```bash
+# Recent daemon logs (default 300 lines)
+curl -s '$BASE/api/logs?lines=100'
+
+# Live tail (SSE stream — Ctrl-C to stop)
+curl -sN $BASE/api/logs/stream
+```
+
+---
+
 ## SSH key management
 
 ```bash
@@ -273,10 +334,13 @@ done
 
 | HTTP | Meaning |
 |------|---------|
+| 400 | Invalid request (bad protocol, public key upload, etc.) |
 | 401 | Missing or wrong `X-API-Key` |
-| 404 | Mount/sync name not found |
+| 403 | Permission denied (file browser) |
+| 404 | Mount/sync/transfer not found |
 | 409 | Name already exists (duplicate) |
-| 400 | Invalid request (e.g. uploading a public key instead of private) |
+| 502 | SSH error (remote file browse failed) |
 | 503 | `/health` — one or more mounts unhealthy |
+| 504 | SSH timeout (remote browse) |
 
 All errors return `{"detail": "message"}`.
