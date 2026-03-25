@@ -1,5 +1,6 @@
 """Tests for rclone backend, lsyncd sync, autofs detection, and service installer."""
 
+import asyncio
 import os
 import sys
 import platform
@@ -18,6 +19,24 @@ from sshfs_keeper.mount import (
 )
 from sshfs_keeper.sync import SyncConfig, SyncState, SyncManager, _build_rsync_cmd, _build_lsyncd_cmd
 from sshfs_keeper.main import _cmd_install_service
+
+
+def _make_stream_mock(data: bytes) -> asyncio.StreamReader:
+    """Create a real asyncio.StreamReader pre-loaded with data for testing."""
+    stream = asyncio.StreamReader()
+    stream.feed_data(data)
+    stream.feed_eof()
+    return stream
+
+
+def _make_proc_mock(returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> MagicMock:
+    """Create a mock subprocess with real asyncio.StreamReader stdout/stderr."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = returncode
+    mock_proc.stdout = _make_stream_mock(stdout)
+    mock_proc.stderr = _make_stream_mock(stderr)
+    mock_proc.wait = AsyncMock()
+    return mock_proc
 
 
 # ------------------------------------------------------------------
@@ -196,9 +215,7 @@ async def test_sync_lsyncd_job_runs() -> None:
     state = SyncState(config=sc)
     sm = SyncManager({"j": state})
 
-    mock_proc = AsyncMock()
-    mock_proc.returncode = 0
-    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+    mock_proc = _make_proc_mock(returncode=0, stdout=b"", stderr=b"")
 
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
         await sm._run_job(state)

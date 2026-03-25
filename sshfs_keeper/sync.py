@@ -379,6 +379,17 @@ class SyncManager:
             state.last_duration = time.time() - start
             state.run_count += 1
 
+            # Set next run based on final status and fail_count (must come after status update)
+            if state.status == SyncStatus.FAILED and state.fail_count >= self._max_retries:
+                backoff = self._backoff_base * (2 ** (state.fail_count - self._max_retries))
+                state._next_run = time.time() + backoff
+                log.info(
+                    "[sync:%s] backoff — retry in %ds (fail_count=%d)",
+                    cfg.name, backoff, state.fail_count,
+                )
+            else:
+                state._next_run = time.time() + cfg.interval
+
     async def _sync_single_target(self, state: SyncState, target_cfg: "SyncConfig", start: float, idx: int, total: int) -> tuple[int, int] | None:  # type: ignore[name-defined]
         """Sync to a single target. Returns (bytes_sent, files_transferred) or None on failure."""
         _tmp = None
@@ -476,13 +487,3 @@ class SyncManager:
                     pass
             if idx == total - 1:
                 state.started_at = None
-                # Set next run after all targets complete
-                if state.status == SyncStatus.FAILED and state.fail_count >= self._max_retries:
-                    backoff = self._backoff_base * (2 ** (state.fail_count - self._max_retries))
-                    state._next_run = time.time() + backoff
-                    log.info(
-                        "[sync:%s] backoff — retry in %ds (fail_count=%d)",
-                        target_cfg.name, backoff, state.fail_count,
-                    )
-                else:
-                    state._next_run = time.time() + target_cfg.interval
