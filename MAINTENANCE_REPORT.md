@@ -1,5 +1,17 @@
 # Maintenance Report
 
+## 2026-03-25 — Transfers feature
+
+**AI Model**: claude-sonnet-4-6
+**Actions Taken**:
+- Created `sshfs_keeper/transfer.py`: `TransferManager`, `TransferRequest`, `TransferState`, `_build_cmd`; supports rsync-over-SSH, rclone, SCP, local rsync; progress streaming; bounded history (20 entries); cancel via SIGTERM
+- Extended `api.py`: `TransferPayload` model; `POST /api/transfers`, `GET /api/transfers`, `DELETE /api/transfers/{id}`, `GET /api/transfers/{id}/log`, `GET /fragments/transfers`
+- Extended `main.py`: creates `TransferManager()` and passes to `api.setup()`
+- Added Transfers tab to `dashboard.html`: protocol dropdown, move toggle, dynamic hints, 3s polling history table
+- Created `_transfer_rows.html` fragment template
+- Created `test/test_transfer.py`: 18 tests, 90% coverage
+**Oversight**: AI-generated; all tests pass (152 total)
+
 ## 2026-03-24 — Comprehensive feature additions
 
 **AI Model**: claude-sonnet-4-6

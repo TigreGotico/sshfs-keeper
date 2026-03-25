@@ -1,5 +1,26 @@
 # sshfs-keeper FAQ
 
+## How do I transfer files between hosts efficiently?
+
+Use the **Transfers tab** in the web UI, or `POST /api/transfers`.
+
+- **rsync (SSH)** — best for SSH servers: delta sync (only changed bytes), resumes after interruption, checksummed. Requires `rsync` on both ends.
+- **rclone** — for cloud storage, FTP, WebDAV, SMB, S3, etc. Requires `rclone` installed.
+- **SCP** — simplest SSH copy; no delta, no resume. Fine for small one-off files.
+- **Local** — between two local paths (e.g., between SSHFS-mounted folders). Uses rsync without SSH overhead.
+
+Why not just copy through an SSHFS mount? Data traverses two FUSE layers (30-50% overhead), and if the mount goes stale mid-transfer the failure is silent. Direct protocols are faster and safer.
+
+**API example — start a transfer:**
+```bash
+curl -s -X POST http://localhost:8765/api/transfers \
+  -H 'Content-Type: application/json' \
+  -d '{"protocol":"rsync_ssh","source":"user@host:/data","dest":"/mnt/backup","move":false}'
+```
+
+Transfer IDs are short hex strings (e.g. `a1b2c3d4`). Use `GET /api/transfers/{id}/log` to see output.
+
+
 ## How do I get notified when a mount fails?
 
 Set `webhook_url` in `[notifications]`. Any HTTP POST endpoint works: Slack incoming webhooks, Discord webhooks, ntfy.sh topic URLs, etc.
