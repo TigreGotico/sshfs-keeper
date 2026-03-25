@@ -333,6 +333,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('mounts')">Mounts</div>
     <div class="tab" onclick="switchTab('syncs')">Sync</div>
+    <div class="tab" onclick="switchTab('transfers')">Transfers</div>
     <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
     <div class="tab" onclick="switchTab('settings')">Settings</div>
     <div class="tab" onclick="switchTab('notifications')">Notifications</div>
@@ -367,6 +368,118 @@
          hx-sync="this:replace"
          hx-indicator="#syncs-indicator">
       {% include "_sync_cards.html" %}
+    </div>
+  </div>
+
+  <!-- ===== TRANSFERS TAB ===== -->
+  <div class="tab-panel" id="tab-transfers">
+    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
+      A <strong>transfer</strong> is a one-shot copy or move between two paths — local folders, SSH servers, or rclone remotes.
+      Unlike Sync jobs it runs once immediately and is not repeated on a schedule.
+      For SSH hosts, <strong>rsync (SSH)</strong> is the best choice: it transfers only changed bytes, verifies checksums, and can resume interrupted transfers.
+    </p>
+
+    <!-- New transfer form -->
+    <form id="transfer-form" class="settings-form"
+          hx-post="/api/transfers"
+          hx-ext="json-enc"
+          hx-swap="none"
+          hx-on::after-request="onTransferStarted(event)"
+          style="margin-bottom:1.4rem">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+        <div>
+          <label>Protocol</label>
+          <select name="protocol" id="tr-protocol" onchange="applyTransferProtocol()">
+            <option value="rsync_ssh">rsync (SSH) — recommended for SSH hosts</option>
+            <option value="local">Local — between mounted/local paths</option>
+            <option value="rclone">rclone — cloud, FTP, WebDAV, SMB</option>
+            <option value="scp">SCP — simple SSH copy</option>
+          </select>
+          <span class="hint" id="tr-proto-hint">
+            rsync transfers only the bytes that changed (delta), supports resume, and verifies checksums.
+            Best choice for SSH servers, NAS devices, and Raspberry Pis.
+          </span>
+        </div>
+        <div>
+          <label>Mode</label>
+          <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem">
+            <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
+              <input type="radio" name="move" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value=false"> Copy
+            </label>
+            <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
+              <input type="radio" name="move" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value=true"> Move <span style="font-size:0.72rem;color:var(--dimmed)">(deletes source after transfer)</span>
+            </label>
+          </div>
+          <input type="hidden" name="move" id="tr-move" value="false">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+        <div>
+          <label>Source</label>
+          <input type="text" name="source" id="tr-source"
+                 placeholder="user@host:/path/to/source" autocomplete="off" required>
+          <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
+        </div>
+        <div>
+          <label>Destination</label>
+          <input type="text" name="dest" id="tr-dest"
+                 placeholder="/mnt/backup/photos" autocomplete="off" required>
+          <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
+        </div>
+      </div>
+
+      <div id="tr-identity-row">
+        <label>SSH Identity Key <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <select name="identity" id="tr-identity">
+          <option value="">— use default SSH key (~/.ssh/id_ed25519 or id_rsa)</option>
+          {% for k in keys %}
+          <option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Only needed if the target server uses a different key than your default SSH key.</span>
+      </div>
+
+      <details style="margin-top:0.3rem">
+        <summary style="font-size:0.78rem;color:var(--muted);cursor:pointer">Advanced options</summary>
+        <div style="margin-top:0.5rem">
+          <label>Extra flags</label>
+          <input type="text" name="options" id="tr-options" placeholder="e.g. --bwlimit=5M --exclude=.DS_Store" autocomplete="off">
+          <span class="hint">Space-separated flags appended to the command. rsync example: <code>--bwlimit=5M</code> limits bandwidth to 5 MB/s.</span>
+        </div>
+      </details>
+
+      <div class="save-row">
+        <button type="submit" class="btn btn-primary" id="tr-submit-btn">▶ Start Transfer</button>
+        <span id="transfers-indicator" class="htmx-indicator" style="font-size:0.78rem;color:#64748b">starting…</span>
+      </div>
+    </form>
+
+    <!-- Transfer history -->
+    <h3 style="font-size:0.85rem;color:var(--label);margin-bottom:0.6rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Recent Transfers</h3>
+    <div style="overflow-x:auto">
+      <table id="transfers-table" style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead>
+          <tr style="color:var(--label);border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">ID</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Protocol</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Source</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Destination</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Status</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Progress</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Time</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="transfers-tbody"
+               hx-get="/fragments/transfers"
+               hx-trigger="refresh, every 3s"
+               hx-swap="innerHTML"
+               hx-indicator="#transfers-indicator">
+          <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -852,6 +965,78 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closeMountModal(); closeSyncModal(); closeLogModal(); }
   });
+
+  // ---- transfer protocol switcher ----
+  const TRANSFER_PROTO_INFO = {
+    rsync_ssh: {
+      protoHint: 'rsync transfers only the bytes that changed (delta sync), supports resume with <code>--partial</code>, and verifies checksums. Best choice for SSH servers, NAS devices, and Raspberry Pis. Requires <code>rsync</code> installed on both ends.',
+      srcPlaceholder: 'user@host:/path/to/source',
+      srcHint: 'Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code>. Can also be a local path.',
+      dstPlaceholder: '/mnt/backup/photos  or  user@host:/path',
+      dstHint: 'Local path or <code>user@host:/path</code> for a remote destination. Only one end needs to be remote.',
+      showIdentity: true,
+    },
+    local: {
+      protoHint: 'Uses rsync between two local paths — perfect for copying between SSHFS-mounted folders on this machine. Faster than rsync-over-SSH because there is no network overhead.',
+      srcPlaceholder: '/mnt/nas/photos',
+      srcHint: 'Local path — e.g. a folder inside one of your SSHFS mounts.',
+      dstPlaceholder: '/mnt/backup/photos',
+      dstHint: 'Another local path — e.g. a folder on a different SSHFS mount or an external drive.',
+      showIdentity: false,
+    },
+    rclone: {
+      protoHint: 'rclone supports S3, Google Drive, Dropbox, FTP, WebDAV, SMB, and 40+ other backends. Use rclone remote syntax: <code>remotename:/path</code> for configured remotes, or inline syntax like <code>:sftp,host=HOST,user=USER:/path</code>.',
+      srcPlaceholder: 'remotename:/path  or  :sftp,host=HOST,user=USER:/data',
+      srcHint: 'rclone remote syntax. Run <code>rclone listremotes</code> to see configured remotes.',
+      dstPlaceholder: '/mnt/local  or  s3remote:/bucket/backup',
+      dstHint: 'Destination in rclone syntax. Can be local or any configured rclone remote.',
+      showIdentity: true,
+    },
+    scp: {
+      protoHint: 'SCP is the simplest SSH copy tool — no delta, no resume. Fine for small files. For large or repeated transfers use rsync (SSH) instead.',
+      srcPlaceholder: 'user@host:/path/to/file',
+      srcHint: 'Local path or <code>user@host:/path</code>. Copies the whole file every time.',
+      dstPlaceholder: '/local/destination/',
+      dstHint: 'Local destination path or <code>user@host:/path</code>.',
+      showIdentity: true,
+    },
+  };
+
+  function applyTransferProtocol() {
+    const proto = document.getElementById('tr-protocol').value;
+    const info = TRANSFER_PROTO_INFO[proto];
+    if (!info) return;
+    document.getElementById('tr-proto-hint').innerHTML = info.protoHint;
+    document.getElementById('tr-source').placeholder = info.srcPlaceholder;
+    document.getElementById('tr-source-hint').innerHTML = info.srcHint;
+    document.getElementById('tr-dest').placeholder = info.dstPlaceholder;
+    document.getElementById('tr-dest-hint').innerHTML = info.dstHint;
+    document.getElementById('tr-identity-row').style.display = info.showIdentity ? '' : 'none';
+  }
+  applyTransferProtocol();
+
+  function onTransferStarted(event) {
+    if (event.detail.successful) {
+      document.getElementById('tr-source').value = '';
+      document.getElementById('tr-dest').value = '';
+      document.getElementById('tr-copy').checked = true;
+      document.getElementById('tr-move').value = 'false';
+      htmx.trigger('#transfers-tbody', 'refresh');
+    }
+  }
+
+  function openTransferLog(id) {
+    const overlay = document.getElementById('log-overlay');
+    const title = document.getElementById('log-modal-title');
+    const output = document.getElementById('log-output');
+    title.textContent = `Transfer ${id} — output`;
+    output.textContent = 'Loading…';
+    overlay.classList.add('open');
+    fetch(`/api/transfers/${id}/log`)
+      .then(r => r.json())
+      .then(d => { output.textContent = (d.lines || []).join('\n') || '(no output yet)'; })
+      .catch(() => { output.textContent = 'Failed to load output.'; });
+  }
 </script>
 </body>
 </html>
