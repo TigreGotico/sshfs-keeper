@@ -15,7 +15,6 @@ import uvicorn
 from sshfs_keeper.config import AppConfig, CONFIG_DIR
 from sshfs_keeper.monitor import Monitor
 from sshfs_keeper.sync import SyncManager, SyncState
-from sshfs_keeper.transfer import TransferManager
 from sshfs_keeper import api as api_module
 
 _PID_FILE = CONFIG_DIR / "daemon.pid"
@@ -104,8 +103,7 @@ async def _run(config: AppConfig) -> None:
     monitor = Monitor(config)
     sync_states = {s.name: SyncState(config=s) for s in config.syncs}
     sync_manager = SyncManager(sync_states, daemon_cfg=config.daemon)
-    transfer_manager = TransferManager()
-    api_module.setup(monitor, config, sync_manager, transfer_manager)
+    api_module.setup(monitor, config, sync_manager)
 
     await monitor.start()
     await sync_manager.start()

@@ -1,37 +1,18 @@
 ---
 name: sshfs-keeper-api
 description: >
-  Manage remote filesystem mounts (SSHFS/rclone), scheduled sync jobs, and
-  one-shot file transfers on a Linux/macOS machine via a local REST API.
-  Use when the user asks to mount/unmount remote filesystems, sync directories,
-  transfer files between local and remote hosts, browse remote directories,
-  or check mount health.
+  Interact with a running sshfs-keeper daemon via its REST API using curl.
+  Use when the user asks to check mount status, add/remove/remount mounts,
+  manage sync jobs, or configure notifications on a sshfs-keeper instance.
 triggers:
   - sshfs-keeper
   - sshfs keeper
   - mount status
   - remount
   - sshfs api
-  - remote mount
-  - file transfer
-  - sync job
-  - browse remote
 ---
 
-# sshfs-keeper — Agent Quick Reference
-
-## What is sshfs-keeper?
-
-A daemon that manages **remote filesystem mounts** (via SSHFS or rclone), **scheduled directory syncs** (rsync/lsyncd/rclone), and **one-shot file transfers** (rsync/scp/rclone) — all configured through a REST API and an optional web dashboard.
-
-It runs as a user-level systemd service, continuously monitors mount health, auto-remounts on failure with exponential backoff, and sends webhook notifications on events.
-
-**Key capabilities:**
-- Mount remote filesystems via SSH (sshfs) or any rclone-supported backend (SFTP, S3, GDrive, SMB, FTP, WebDAV)
-- Schedule recurring directory syncs (rsync direct-over-SSH, lsyncd real-time, rclone for cloud)
-- Run one-shot file transfers with progress tracking, cancel, and resume
-- Browse local and remote directories over SSH
-- Stream logs in real time
+# sshfs-keeper API — Agent Quick Reference
 
 ## Defaults
 
@@ -222,67 +203,6 @@ curl -s -X PUT $BASE/api/notifications \
 
 ---
 
-## File transfers
-
-```bash
-# Start a transfer (rsync over SSH)
-curl -s -X POST $BASE/api/transfers \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "protocol": "rsync_ssh",
-    "source": "user@host:/data/archive.tar.gz",
-    "dest": "/local/archive.tar.gz"
-  }'
-
-# Start a move (deletes source after copy)
-curl -s -X POST $BASE/api/transfers \
-  -H 'Content-Type: application/json' \
-  -d '{"protocol":"rsync_ssh","source":"/local/old/","dest":"user@host:/archive/","move":true}'
-
-# List all transfers (newest first)
-curl -s $BASE/api/transfers | python3 -m json.tool
-
-# View transfer output/log
-curl -s $BASE/api/transfers/TRANSFER_ID/log
-
-# Cancel a running transfer
-curl -s -X DELETE $BASE/api/transfers/TRANSFER_ID
-
-# Resume a failed/cancelled rsync transfer (uses --partial --append-verify)
-curl -s -X POST $BASE/api/transfers/TRANSFER_ID/resume
-```
-
-**Protocol values:** `rsync_ssh` (recommended), `scp`, `rclone`, `local` (rsync between local paths)
-**Transfer status values:** `running` `done` `failed` `cancelled`
-
----
-
-## File browser
-
-```bash
-# Browse local directory
-curl -s '$BASE/api/browse?path=/home/user' | python3 -m json.tool
-
-# Browse remote directory via SSH
-curl -s '$BASE/api/browse?path=/data&host=user@server&identity=mykey'
-```
-
-Response: `{"path": "/data", "entries": [{"name": "subdir/", "is_dir": true, "size": null}, {"name": "file.txt", "is_dir": false, "size": 1024}]}`
-
----
-
-## Logs
-
-```bash
-# Recent daemon logs (default 300 lines)
-curl -s '$BASE/api/logs?lines=100'
-
-# Live tail (SSE stream — Ctrl-C to stop)
-curl -sN $BASE/api/logs/stream
-```
-
----
-
 ## SSH key management
 
 ```bash
@@ -353,13 +273,10 @@ done
 
 | HTTP | Meaning |
 |------|---------|
-| 400 | Invalid request (bad protocol, public key upload, etc.) |
 | 401 | Missing or wrong `X-API-Key` |
-| 403 | Permission denied (file browser) |
-| 404 | Mount/sync/transfer not found |
+| 404 | Mount/sync name not found |
 | 409 | Name already exists (duplicate) |
-| 502 | SSH error (remote file browse failed) |
+| 400 | Invalid request (e.g. uploading a public key instead of private) |
 | 503 | `/health` — one or more mounts unhealthy |
-| 504 | SSH timeout (remote browse) |
 
 All errors return `{"detail": "message"}`.
