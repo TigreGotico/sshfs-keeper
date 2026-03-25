@@ -173,6 +173,17 @@ After `max_retries` consecutive failures (default: 3), the sync manager applies 
 ## Why does /api/syncs return an object not a list?
 `GET /api/syncs` returns `{"syncs": [...]}` (not a bare list). The earlier bare-list variant was a duplicate route that was silently shadowed by FastAPI — it has been removed.
 
+## What prevents `save()` from wiping my mounts?
+
+Two defensive layers since commit 2524e53:
+
+1. **`save()` guard** — if `save()` is called with 0 mounts while the on-disk config already contains mounts, it logs an ERROR with a full stack trace and **returns without writing**. This prevents a transient empty `AppConfig` from overwriting a healthy config.
+2. **`load()` auto-restore** — if `load()` reads 0 mounts from `config.toml` but `config.bak` has mounts, it automatically copies the backup back to `config.toml` and logs a WARNING before returning the recovered config.
+
+If you see these log lines it means the guard triggered:
+- `ERROR … save() called with 0 mounts but on-disk config has N mounts — refusing to overwrite`
+- `WARNING … Config at … has 0 mounts but backup has N mounts — auto-restoring from …`
+
 ## Why do my mounts disappear after a daemon restart?
 
 Root cause: `AppConfig.save()` previously used `path.write_text()` which is not atomic. If systemd sends SIGKILL (after a SIGTERM timeout), the file write is interrupted mid-way, leaving a truncated config.toml with 0 mounts.

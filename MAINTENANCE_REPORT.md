@@ -1,5 +1,14 @@
 # Maintenance Report
 
+## 2026-03-25 — Config wipe guard + GitHub footer links
+
+**AI Model**: claude-sonnet-4-6
+**Actions Taken**:
+- `config.py` `save()`: refuses to overwrite on-disk config when called with 0 mounts but disk has mounts; logs ERROR with stack trace and returns
+- `config.py` `load()`: if config loads with 0 mounts but `config.bak` has mounts, auto-restores from backup and logs WARNING
+- `dashboard.html` footer: added GitHub repo link (`https://github.com/TigreGotico/sshfs-keeper`) and "Report issue" button linking to GitHub issues
+**Oversight**: AI-generated; all 152 tests pass
+
 ## 2026-03-25 — Transfers feature
 
 **AI Model**: claude-sonnet-4-6
