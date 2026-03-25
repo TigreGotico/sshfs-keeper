@@ -1,5 +1,14 @@
 # Maintenance Report
 
+## 2026-03-25 — Sync direct SSH transport fix
+
+**AI Model**: claude-sonnet-4-6
+**Actions Taken**:
+- `sync.py` `_build_rsync_cmd()`: auto-detects remote paths via `_is_remote()` regex and always injects `-e ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new` when source or target is `user@host:/path`; previously only injected when `identity` was set
+- `dashboard.html` sync modal: clarified sync tool selector labels with "(direct SSH)" suffix and updated hint text explaining SSH bypass behaviour
+- `test_platform.py`: updated `test_build_rsync_cmd_with_identity` to use a remote target path (identity only applies to remote syncs)
+**Oversight**: AI-generated; 152 tests pass
+
 ## 2026-03-25 — Config wipe guard + GitHub footer links
 
 **AI Model**: claude-sonnet-4-6

@@ -98,6 +98,12 @@ mount_tool = "rclone"
 
 rclone must be installed and `--allow-other` must be permitted in `/etc/fuse.conf`. This is the recommended backend for macOS and Windows (requires WinFsp).
 
+## Do sync jobs transfer via the SSHFS mount or direct SSH?
+
+Direct SSH — rsync and lsyncd jobs always transfer data directly over SSH, bypassing the FUSE mount entirely. This means sync works even when the mount is stale or temporarily unavailable, and avoids the 30–50% FUSE overhead.
+
+When source or target is a remote path (`user@host:/path`), sshfs-keeper automatically injects `-e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"` into the rsync command. For rclone jobs the SFTP backend connects directly to the SSH server.
+
 ## How do I use lsyncd for real-time sync?
 
 Set `sync_tool = "lsyncd"` in the sync config. lsyncd is invoked with `--oneshot` so it performs one sync pass and exits, matching the interval-based scheduler:
