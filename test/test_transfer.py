@@ -23,7 +23,7 @@ def test_build_cmd_rsync_ssh_copy() -> None:
     req = TransferRequest(protocol="rsync_ssh", source="user@host:/src", dest="/dst")
     cmd = _build_cmd(req)
     assert cmd[0] == "rsync"
-    assert "--info=progress2" in cmd
+    assert "--progress" in cmd
     assert "--remove-source-files" not in cmd
     assert "/dst" in cmd
     assert "user@host:/src" in cmd

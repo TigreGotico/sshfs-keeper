@@ -1258,9 +1258,8 @@
   let _logsInited = false;
 
   function logsInit() {
-    if (_logsInited) return;
     _logsInited = true;
-    logsRefresh();
+    if (!document.getElementById('logs-live')?.checked) logsRefresh();
   }
 
   function logsRefresh() {

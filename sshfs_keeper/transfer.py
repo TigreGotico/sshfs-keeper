@@ -84,13 +84,13 @@ def _build_cmd(req: TransferRequest) -> list[str]:
     extra = req.options.split() if req.options.strip() else []
 
     if req.protocol == "local":
-        cmd = ["rsync", "-az", "--info=progress2"]
+        cmd = ["rsync", "-az", "--progress", "-v"]
         if req.move:
             cmd.append("--remove-source-files")
         return cmd + extra + [req.source, req.dest]
 
     if req.protocol == "rsync_ssh":
-        cmd = ["rsync", "-az", "--info=progress2"]
+        cmd = ["rsync", "-az", "--progress", "-v"]
         if req.move:
             cmd.append("--remove-source-files")
         ssh = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
@@ -239,24 +239,64 @@ class TransferManager:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stderr=asyncio.subprocess.PIPE,
             )
             state._proc = proc
 
-            assert proc.stdout is not None
-            async for raw_line in proc.stdout:
-                if state.status == TransferStatus.CANCELLED:
-                    break
-                line = raw_line.decode(errors="replace").rstrip()
-                if not line:
-                    continue
-                state.output.append(line)
-                if len(state.output) > _MAX_OUTPUT_LINES:
-                    state.output.pop(0)
-                # rsync --info=progress2 / rclone --progress lines contain % or xfr#
-                if "%" in line or "xfr#" in line or "Transferred" in line:
-                    state.last_progress = line
+            async def _drain(stream: object) -> None:
+                """Read stream chunks (split on \\n or \\r) into state.
 
+                Supports both asyncio.StreamReader (real subprocess) and
+                async iterables of bytes (test mocks).
+                """
+                buf = b""
+
+                from typing import AsyncGenerator as _AG
+
+                async def _chunks() -> _AG[bytes, None]:
+                    if isinstance(stream, asyncio.StreamReader):
+                        # Real asyncio.StreamReader
+                        while True:
+                            chunk = await stream.read(4096)
+                            if not chunk:
+                                return
+                            yield chunk
+                    else:
+                        # Async iterable (test mock yields whole lines)
+                        async for line in stream:  # type: ignore[union-attr]
+                            yield line
+
+                async for chunk in _chunks():
+                    buf += chunk
+                    while True:
+                        next_sep = -1
+                        for sep in (b"\n", b"\r"):
+                            idx = buf.find(sep)
+                            if idx >= 0 and (next_sep < 0 or idx < next_sep):
+                                next_sep = idx
+                        if next_sep < 0:
+                            break
+                        raw_line = buf[:next_sep]
+                        buf = buf[next_sep + 1:]
+                        line = raw_line.decode(errors="replace").strip()
+                        if not line:
+                            continue
+                        state.output.append(line)
+                        if len(state.output) > _MAX_OUTPUT_LINES:
+                            state.output.pop(0)
+                        if "%" in line or "xfr#" in line or "Transferred" in line:
+                            state.last_progress = line
+                        if state.status == TransferStatus.CANCELLED:
+                            return
+                # flush remainder
+                if buf:
+                    line = buf.decode(errors="replace").strip()
+                    if line:
+                        state.output.append(line)
+
+            assert proc.stdout is not None
+            assert proc.stderr is not None
+            await asyncio.gather(_drain(proc.stdout), _drain(proc.stderr))
             await proc.wait()
 
             if state.status == TransferStatus.CANCELLED:
