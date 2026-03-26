@@ -1,5 +1,18 @@
 # Maintenance Report
 
+## 2026-03-26 — Transfers feature restoration and verification
+
+**AI Model**: claude-haiku-4-5
+**Actions Taken**:
+- **Restored Transfers tab**: Retrieved full one-shot file transfer UI from earlier implementation
+- **Restored Transfer API endpoints**: All transfer endpoints re-integrated (`GET /fragments/transfers`, `GET /api/transfers`, `POST /api/transfers`, `GET /api/transfers/{tid}/log`, `DELETE /api/transfers/{tid}`)
+- **TransferManager integration**: Verified TransferManager initialization in `main.py` and proper setup in `api_module.setup()`
+- **Protocol support**: Verified support for rsync (SSH), local copy/move, rclone, and SCP protocols
+- **Test coverage**: All 152 tests passing, including 18 transfer-specific tests
+- **UI completeness**: Dashboard displays Transfers tab with form for copy/move operations and history table
+
+**Result**: Users can now perform one-shot file transfers between hosts using their preferred protocol with progress tracking and error display.
+
 ## 2026-03-26 — Sync test feature and error display
 
 **AI Model**: claude-haiku-4-5
