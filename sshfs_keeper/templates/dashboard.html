@@ -334,6 +334,7 @@
     <div class="tab active" onclick="switchTab('mounts')">Mounts</div>
     <div class="tab" onclick="switchTab('syncs')">Sync</div>
     <div class="tab" onclick="switchTab('transfers')">Transfers</div>
+    <div class="tab" onclick="switchTab('hosts')">Hosts</div>
     <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
     <div class="tab" onclick="switchTab('settings')">Settings</div>
     <div class="tab" onclick="switchTab('notifications')">Notifications</div>
@@ -483,6 +484,43 @@
     </div>
   </div>
 
+  <!-- ===== HOSTS TAB ===== -->
+  <div class="tab-panel" id="tab-hosts">
+    <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
+      A <strong>host</strong> is a remote SSH server that you want to mount, sync, or transfer files to. Define hosts once and reuse them in mounts, syncs, and transfers. Each host can have a default SSH key identity.
+    </p>
+    <div class="add-btn-row">
+      <button class="btn btn-primary" onclick="openHostModal()">+ Add Host</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:0.5rem;color:var(--label)">Name</th>
+          <th style="text-align:left;padding:0.5rem;color:var(--label)">Connection</th>
+          <th style="text-align:left;padding:0.5rem;color:var(--label)">SSH Key</th>
+          <th style="text-align:left;padding:0.5rem;color:var(--label)">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in hosts %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:0.5rem">{{ h.name }}</td>
+          <td style="padding:0.5rem">{{ h.user }}@{{ h.hostname }}{% if h.port != 22 %}:{{ h.port }}{% endif %}</td>
+          <td style="padding:0.5rem;color:var(--dimmed)">{{ h.identity if h.identity else '(default)' }}</td>
+          <td style="padding:0.5rem">
+            <button class="btn btn-sm btn-muted" onclick="openHostModal('{{ h.name }}','{{ h.hostname }}','{{ h.user }}',{{ h.port }},'{{ h.identity or '' }}')">Edit</button>
+            <button class="btn btn-sm btn-danger" hx-delete="/api/hosts/{{ h.name | urlencode }}" hx-confirm="Delete host &quot;{{ h.name }}&quot;?" hx-swap="none" hx-on::after-request="location.reload()">Delete</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" style="text-align:center;padding:2rem;color:var(--dimmed)">No hosts configured yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
   <!-- ===== SSH KEYS TAB ===== -->
   <div class="tab-panel" id="tab-keys">
     <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
@@ -608,6 +646,45 @@
   </div>
   <div>© 2026 <a href="https://tigregotico.pt" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">Tigre Gótico Lda.</a> — sshfs-keeper is open source, licensed under Apache 2.0</div>
 </footer>
+
+<!-- ===== ADD / EDIT HOST MODAL ===== -->
+<div class="overlay" id="host-overlay" onclick="if(event.target===this)closeHostModal()">
+  <div class="modal">
+    <h2 id="host-modal-title">Add Host</h2>
+    <form hx-post="/api/hosts" hx-swap="none" hx-on::after-request="closeHostModal();location.reload()">
+      <input type="hidden" id="h-editing" name="_editing">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+        <div>
+          <label>Name (e.g., <code>nas</code>, <code>backup</code>)</label>
+          <input type="text" id="h-name" name="name" required disabled style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        </div>
+        <div>
+          <label>Hostname or IP</label>
+          <input type="text" id="h-hostname" name="hostname" placeholder="192.168.1.10 or nas.local" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        </div>
+        <div>
+          <label>SSH User</label>
+          <input type="text" id="h-user" name="user" placeholder="miro" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        </div>
+        <div>
+          <label>SSH Port</label>
+          <input type="number" id="h-port" name="port" value="22" min="1" max="65535" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        </div>
+      </div>
+      <div style="margin-bottom:1.5rem">
+        <label>Default SSH Key Identity (optional)</label>
+        <select id="h-identity" name="identity" style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
+          <option value="">(system default key)</option>
+          {% for k in keys %}<option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>{% endfor %}
+        </select>
+      </div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button type="button" class="btn btn-muted" onclick="closeHostModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Host</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- ===== ADD / EDIT MOUNT MODAL ===== -->
 <div class="overlay" id="mount-overlay" onclick="if(event.target===this)closeMountModal()">
@@ -765,7 +842,7 @@
 <script>
   // ---- tabs (minimal JS — CSS only alternative would need :target anchors) ----
   function switchTab(name) {
-    const panels = ['mounts','syncs','keys','settings','notifications'];
+    const panels = ['mounts','syncs','transfers','hosts','keys','settings','notifications'];
     document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', panels[i] === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   }
@@ -781,6 +858,30 @@
   }
   document.addEventListener('showToast', e => toast(e.detail.value, e.detail.toastOk !== false));
   document.addEventListener('htmx:responseError', () => toast('Request failed', false));
+
+  // ---- host modal ----
+  function openHostModal(name, hostname, user, port, identity) {
+    const editing = !!name;
+    document.getElementById('host-modal-title').textContent = editing ? `Edit Host — ${name}` : 'Add Host';
+    const form = document.querySelector('#host-overlay form');
+    if (editing) {
+      form.setAttribute('hx-put', `/api/hosts/${encodeURIComponent(name)}`);
+      form.setAttribute('hx-post', null);
+      document.getElementById('h-name').disabled = true;
+    } else {
+      form.setAttribute('hx-post', '/api/hosts');
+      form.removeAttribute('hx-put');
+      document.getElementById('h-name').disabled = false;
+    }
+    document.getElementById('h-name').value = name || '';
+    document.getElementById('h-hostname').value = hostname || '';
+    document.getElementById('h-user').value = user || '';
+    document.getElementById('h-port').value = port || 22;
+    document.getElementById('h-identity').value = identity || '';
+    document.getElementById('h-editing').value = name || '';
+    document.getElementById('host-overlay').classList.add('open');
+  }
+  function closeHostModal() { document.getElementById('host-overlay').classList.remove('open'); }
 
   // ---- mount modal ----
   function openMountModal(name, remote, local, mountTool) {
