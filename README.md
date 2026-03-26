@@ -13,7 +13,8 @@ A daemon that monitors SSHFS (and rclone) mounts, automatically remounts them wh
 - autofs-aware: skips mounts managed by autofs
 - Passphrase-protected SSH keys: pre-loads via `ssh-add`
 - Mount backends: `sshfs` or `rclone` (per-mount, hot-switchable via API)
-- Sync jobs: rsync / lsyncd / rclone on configurable intervals
+- Sync jobs: rsync / lsyncd / rclone on configurable intervals (with multi-target support)
+- One-shot file transfers: copy/move files between hosts using rsync, rclone, or SCP
 - Live web dashboard (HTMX + SSE, no page reload required)
 - REST API with optional `X-API-Key` authentication and optional TLS
 - Prometheus metrics at `GET /metrics`
