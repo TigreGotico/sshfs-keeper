@@ -17,6 +17,7 @@ from sshfs_keeper import metrics as _metrics_module
 from sshfs_keeper.config import AppConfig, CONFIG_DIR, MountConfig, SyncConfig, KEYS_DIR
 from sshfs_keeper.monitor import Monitor, MountState
 from sshfs_keeper.sync import SyncManager, SyncState
+from sshfs_keeper.transfer import TransferManager, TransferRequest
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 _VERSION = "0.1.0"
@@ -42,10 +43,16 @@ templates.env.cache = _NoCache()  # type: ignore[assignment]
 _monitor: Optional[Monitor] = None
 _config: Optional[AppConfig] = None
 _sync_manager: Optional[SyncManager] = None
+_transfer_manager: Optional[TransferManager] = None
 _sse_queues: list[asyncio.Queue[Optional[dict[str, Any]]]] = []
 
 
-def setup(monitor: Monitor, config: AppConfig, sync_manager: Optional[SyncManager] = None) -> None:
+def setup(
+    monitor: Monitor,
+    config: AppConfig,
+    sync_manager: Optional[SyncManager] = None,
+    transfer_manager: Optional[TransferManager] = None,
+) -> None:
     """Wire global module-level singletons and register the SSE event listener.
 
     Args:
@@ -53,10 +60,11 @@ def setup(monitor: Monitor, config: AppConfig, sync_manager: Optional[SyncManage
         config: Loaded :class:`~sshfs_keeper.config.AppConfig`.
         sync_manager: Optional running :class:`~sshfs_keeper.sync.SyncManager` instance.
     """
-    global _monitor, _config, _sync_manager
+    global _monitor, _config, _sync_manager, _transfer_manager
     _monitor = monitor
     _config = config
     _sync_manager = sync_manager
+    _transfer_manager = transfer_manager
     monitor.add_event_listener(_broadcast_event)
 
 
@@ -102,6 +110,12 @@ def _get_sync_manager() -> SyncManager:
     return _sync_manager
 
 
+def _get_transfer_manager() -> TransferManager:
+    if _transfer_manager is None:
+        raise RuntimeError("TransferManager not initialised")
+    return _transfer_manager
+
+
 def _get_config() -> AppConfig:
     if _config is None:
         raise RuntimeError("Config not initialised")
@@ -138,7 +152,6 @@ class SyncPayload(BaseModel):
     identity: Optional[str] = None
     enabled: bool = True
     sync_tool: str = "rsync"
-    targets: list[str] = []  # additional targets to sync to
 
 
 class DaemonSettingsPayload(BaseModel):
@@ -155,6 +168,15 @@ class NotificationsPayload(BaseModel):
     on_failure: bool = True
     on_recovery: bool = True
     on_backoff: bool = False
+
+
+class TransferPayload(BaseModel):
+    protocol: str  # "rsync_ssh" | "scp" | "rclone" | "local"
+    source: str
+    dest: str
+    move: bool = False
+    identity: Optional[str] = None
+    options: str = ""
 
 
 # ------------------------------------------------------------------
@@ -187,62 +209,10 @@ async def dashboard(request: Request) -> HTMLResponse:
 # ------------------------------------------------------------------
 
 
-@app.get("/version")
-async def version_simple() -> dict:  # type: ignore[type-arg]
-    """Quick version check for deployment verification."""
-    return {"version": _VERSION}
-
-
 @app.get("/api/version")
 async def api_version() -> dict:  # type: ignore[type-arg]
-    """Return the running daemon version and deployment info."""
-    import subprocess as _sp
-    import time as _time
-    from pathlib import Path as _Path
-
-    result = {
-        "version": _VERSION,
-        "timestamp": _time.time(),
-    }
-
-    # Get git commit hash if available
-    try:
-        repo_root = _Path(__file__).parent.parent.parent
-        commit = _sp.check_output(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            stderr=_sp.DEVNULL,
-            text=True,
-        ).strip()[:8]
-        result["commit"] = commit
-    except Exception:
-        pass
-
-    # Get service start time from /proc
-    try:
-        pidfile = _Path.home() / ".config" / "sshfs-keeper" / "daemon.pid"
-        if pidfile.exists():
-            pid = int(pidfile.read_text().strip())
-            proc_stat = _Path(f"/proc/{pid}/stat").read_text().split()
-            # Field 21 (0-indexed) is starttime in jiffies since boot
-            starttime_jiffies = int(proc_stat[21])
-            # Get clock ticks per second to convert
-            import os as _os
-            ticks_per_sec = _os.sysconf("SC_CLK_TCK")
-            # Get boot time by reading /proc/stat
-            boottime_s = 0
-            with open("/proc/stat") as f:
-                for line in f:
-                    if line.startswith("btime"):
-                        boottime_s = int(line.split()[1])
-                        break
-            if boottime_s:
-                start_s = boottime_s + (starttime_jiffies / ticks_per_sec)
-                result["started_at"] = start_s
-                result["uptime_seconds"] = int(_time.time() - start_s)
-    except Exception:
-        pass
-
-    return result
+    """Return the running daemon version."""
+    return {"version": _VERSION}
 
 
 @app.get("/metrics", response_class=PlainTextResponse)
@@ -662,7 +632,7 @@ async def api_add_sync(payload: SyncPayload, request: Request) -> dict:  # type:
         name=payload.name, source=payload.source, target=payload.target,
         interval=payload.interval, options=payload.options,
         identity=payload.identity or None, enabled=payload.enabled,
-        sync_tool=payload.sync_tool, targets=payload.targets or [],
+        sync_tool=payload.sync_tool,
     )
     cfg.syncs.append(sc)
     sm.states[sc.name] = SyncState(config=sc)
@@ -686,7 +656,6 @@ async def api_update_sync(name: str, payload: SyncPayload, request: Request) -> 
     sc.identity = payload.identity or None
     sc.enabled = payload.enabled
     sc.sync_tool = payload.sync_tool
-    sc.targets = payload.targets or []
     if payload.name != name:
         if payload.name in sm.states:
             raise HTTPException(status_code=409, detail=f"Sync '{payload.name}' already exists")
@@ -698,76 +667,6 @@ async def api_update_sync(name: str, payload: SyncPayload, request: Request) -> 
                 break
     cfg.save()
     return _htmx_json({"name": sc.name, "updated": True}, toast=f"{sc.name} updated ✔")
-
-
-@app.post("/api/syncs/test")
-async def api_test_sync(payload: SyncPayload, request: Request) -> dict:  # type: ignore[type-arg]
-    """Test a sync configuration without saving it.
-
-    Runs a dry-run rsync/rclone command with --dry-run flag to verify
-    the source and destination are accessible and the command is valid.
-    """
-    _check_api_key(request)
-    try:
-        from sshfs_keeper.sync import _build_rsync_cmd, _build_rclone_sync_cmd
-
-        test_config = SyncConfig(
-            name=payload.name,
-            source=payload.source,
-            target=payload.target,
-            interval=payload.interval,
-            options=payload.options,
-            identity=payload.identity,
-            enabled=payload.enabled,
-            sync_tool=payload.sync_tool,
-            targets=payload.targets or [],
-        )
-
-        # Build the test command with --dry-run
-        if test_config.sync_tool == "rclone":
-            cmd = _build_rclone_sync_cmd(test_config)
-            cmd.insert(1, "--dry-run")  # rclone: rclone sync --dry-run src dst
-        else:
-            cmd = _build_rsync_cmd(test_config)
-            cmd.append("--dry-run")  # rsync: rsync ... --dry-run
-
-        # Run the test command with a short timeout
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=10)
-        except asyncio.TimeoutError:
-            return _htmx_json(
-                {"success": False, "error": "Test sync timed out after 10 seconds"},
-                toast="Sync test failed: timeout",
-                ok=False,
-            )
-
-        if proc.returncode in {0, 23, 24}:  # 0=success, 23/24=non-fatal rsync errors
-            output = stdout_data.decode(errors="replace") + stderr_data.decode(errors="replace")
-            return _htmx_json(
-                {"success": True, "output": output[:500]},  # First 500 chars
-                toast=f"Sync test passed ✔",
-                ok=True,
-            )
-        else:
-            error_msg = stderr_data.decode(errors="replace") or f"exit code {proc.returncode}"
-            return _htmx_json(
-                {"success": False, "error": error_msg[:500]},
-                toast="Sync test failed",
-                ok=False,
-            )
-    except Exception as e:
-        import traceback
-        error = f"{type(e).__name__}: {str(e)}"
-        return _htmx_json(
-            {"success": False, "error": error},
-            toast="Sync test error",
-            ok=False,
-        )
 
 
 @app.delete("/api/syncs/{name}")
@@ -838,3 +737,90 @@ async def api_disable_sync(name: str, request: Request) -> dict:  # type: ignore
     state.config.enabled = False
     _get_config().save()
     return {"name": name, "enabled": False}
+
+
+# ------------------------------------------------------------------
+# Transfers
+# ------------------------------------------------------------------
+
+
+@app.get("/fragments/transfers", response_class=HTMLResponse)
+async def fragment_transfers(request: Request) -> HTMLResponse:
+    """Return the transfers table rows HTML for HTMX polling."""
+    tm = _get_transfer_manager()
+    return templates.TemplateResponse(
+        request,
+        "_transfer_rows.html",
+        {"transfers": tm.get_snapshot()},
+    )
+
+
+@app.get("/api/transfers")
+async def api_list_transfers() -> dict:  # type: ignore[type-arg]
+    """Return all transfer records (newest first)."""
+    return {"transfers": _get_transfer_manager().get_snapshot()}
+
+
+@app.post("/api/transfers")
+async def api_start_transfer(payload: TransferPayload, request: Request) -> JSONResponse:
+    """Start a one-shot file transfer.
+
+    Args:
+        payload: Transfer parameters.
+
+    Returns:
+        JSON with ``id`` of the new transfer and an ``HX-Trigger`` toast header.
+    """
+    _check_api_key(request)
+    tm = _get_transfer_manager()
+    valid = {"rsync_ssh", "scp", "rclone", "local"}
+    if payload.protocol not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid protocol '{payload.protocol}'. Choose from: {', '.join(sorted(valid))}",
+        )
+    req = TransferRequest(
+        protocol=payload.protocol,
+        source=payload.source,
+        dest=payload.dest,
+        move=payload.move,
+        identity=payload.identity or None,
+        options=payload.options,
+    )
+    tid = await tm.start(req)
+    label = "move" if payload.move else "copy"
+    return _htmx_json({"id": tid, "started": True}, toast=f"Transfer {tid} started ({label}) ✔")
+
+
+@app.get("/api/transfers/{tid}/log")
+async def api_transfer_log(tid: str, request: Request) -> Any:
+    """Return captured output for transfer *tid*.
+
+    Returns HTML when called from HTMX, JSON otherwise.
+
+    Args:
+        tid: Transfer ID.
+    """
+    tm = _get_transfer_manager()
+    lines = tm.get_output(tid)
+    if lines is None:
+        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found")
+    if request.headers.get("HX-Request"):
+        content = "\n".join(lines) if lines else "(no output yet)"
+        return HTMLResponse(content)
+    return {"id": tid, "lines": lines}
+
+
+@app.delete("/api/transfers/{tid}")
+async def api_cancel_transfer(tid: str, request: Request) -> JSONResponse:
+    """Cancel a running transfer.
+
+    Args:
+        tid: Transfer ID.
+    """
+    _check_api_key(request)
+    tm = _get_transfer_manager()
+    ok = await tm.cancel(tid)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found or already finished")
+    return _htmx_json({"id": tid, "cancelled": True}, toast=f"Transfer {tid} cancelled")
