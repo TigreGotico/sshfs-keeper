@@ -38,6 +38,10 @@ class SyncConfig:
     enabled: bool = True
     sync_tool: str = "rsync"  # "rsync" | "lsyncd"
     targets: list[str] = field(default_factory=list)  # additional targets to sync to
+    source_host: str = ""  # references HostConfig.name for source; empty = manual
+    source_path: str = ""  # path on source host (used with source_host)
+    target_host: str = ""  # references HostConfig.name for target; empty = manual
+    target_path: str = ""  # path on target host (used with target_host)
 
 
 _MAX_OUTPUT_LINES = 50
@@ -286,6 +290,10 @@ class SyncManager:
                 "name": s.config.name,
                 "source": s.config.source,
                 "target": s.config.target,
+                "source_host": s.config.source_host,
+                "source_path": s.config.source_path,
+                "target_host": s.config.target_host,
+                "target_path": s.config.target_path,
                 "interval": s.config.interval,
                 "options": s.config.options,
                 "enabled": s.config.enabled,

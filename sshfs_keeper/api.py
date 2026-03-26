@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from sshfs_keeper import metrics as _metrics_module
-from sshfs_keeper.config import AppConfig, CONFIG_DIR, MountConfig, SyncConfig, KEYS_DIR
+from sshfs_keeper.config import AppConfig, CONFIG_DIR, HostConfig, MountConfig, SyncConfig, KEYS_DIR
 from sshfs_keeper.monitor import Monitor, MountState
 from sshfs_keeper.sync import SyncManager, SyncState
 from sshfs_keeper.transfer import TransferManager, TransferRequest
@@ -129,29 +129,65 @@ def _check_api_key(request: Request) -> None:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def _resolve_remote(host_name: str, path: str) -> tuple[str, Optional[str]]:
+    """Assemble user@hostname:path from a HostConfig reference.
+
+    Args:
+        host_name: Name of a HostConfig in the current config.
+        path: Path on the remote host.
+
+    Returns:
+        Tuple of (remote_string, inherited_identity). inherited_identity is the
+        host's identity if no per-job identity was set.
+
+    Raises:
+        HTTPException: If host_name not found.
+    """
+    config = _get_config()
+    host = next((h for h in config.hosts if h.name == host_name), None)
+    if host is None:
+        raise HTTPException(404, f"Host '{host_name}' not found")
+    remote = f"{host.user}@{host.hostname}:{path}"
+    return remote, host.identity
+
+
 # ------------------------------------------------------------------
 # Pydantic models for request bodies
 # ------------------------------------------------------------------
 
+class HostPayload(BaseModel):
+    name: str
+    hostname: str
+    user: str
+    port: int = 22
+    identity: Optional[str] = None
+
+
 class MountPayload(BaseModel):
     name: str
-    remote: str
+    remote: str = ""
     local: str
     options: str = "cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect"
     identity: Optional[str] = None
     enabled: bool = True
     mount_tool: str = "sshfs"
+    host_name: str = ""  # references HostConfig.name; empty = use raw remote string
+    path: str = ""  # path on the remote host (used with host_name)
 
 
 class SyncPayload(BaseModel):
     name: str
-    source: str
-    target: str
+    source: str = ""
+    target: str = ""
     interval: int = 3600
     options: str = "-az --delete --stats"
     identity: Optional[str] = None
     enabled: bool = True
     sync_tool: str = "rsync"
+    source_host: str = ""
+    source_path: str = ""
+    target_host: str = ""
+    target_path: str = ""
 
 
 class DaemonSettingsPayload(BaseModel):
@@ -172,11 +208,15 @@ class NotificationsPayload(BaseModel):
 
 class TransferPayload(BaseModel):
     protocol: str  # "rsync_ssh" | "scp" | "rclone" | "local"
-    source: str
-    dest: str
+    source: str = ""
+    dest: str = ""
     move: bool = False
     identity: Optional[str] = None
     options: str = ""
+    source_host: str = ""
+    source_path: str = ""
+    dest_host: str = ""
+    dest_path: str = ""
 
 
 # ------------------------------------------------------------------
@@ -199,6 +239,7 @@ async def dashboard(request: Request) -> HTMLResponse:
             "notifications": cfg.notifications,
             "now": time.time(),
             "keys": keys,
+            "hosts": cfg.hosts,
             "config_dir": str(CONFIG_DIR),
         },
     )
@@ -374,14 +415,27 @@ async def api_add_mount(payload: MountPayload, request: Request) -> dict:  # typ
     if payload.name in monitor.states:
         raise HTTPException(status_code=409, detail=f"Mount '{payload.name}' already exists")
 
+    # Resolve host+path to remote string if host_name is provided
+    remote = payload.remote
+    identity = payload.identity
+    host_name = payload.host_name
+    path = payload.path
+
+    if host_name:
+        remote, host_identity = _resolve_remote(host_name, path)
+        if not identity:
+            identity = host_identity  # inherit host's identity if not set
+
     mc = MountConfig(
         name=payload.name,
-        remote=payload.remote,
+        remote=remote,
         local=payload.local,
         options=payload.options,
-        identity=payload.identity or None,
+        identity=identity or None,
         enabled=payload.enabled,
         mount_tool=payload.mount_tool,
+        host_name=host_name,
+        path=path,
     )
     cfg.mounts.append(mc)
     monitor.states[mc.name] = MountState(config=mc)
@@ -401,12 +455,26 @@ async def api_update_mount(name: str, payload: MountPayload, request: Request) -
 
     # Update in-memory config
     mc = state.config
-    mc.remote = payload.remote
+
+    # Resolve host+path to remote string if host_name is provided
+    remote = payload.remote
+    identity = payload.identity
+    host_name = payload.host_name
+    path = payload.path
+
+    if host_name:
+        remote, host_identity = _resolve_remote(host_name, path)
+        if not identity:
+            identity = host_identity  # inherit host's identity if not set
+
+    mc.remote = remote
     mc.local = payload.local
     mc.options = payload.options
-    mc.identity = payload.identity or None
+    mc.identity = identity or None
     mc.enabled = payload.enabled
     mc.mount_tool = payload.mount_tool
+    mc.host_name = host_name
+    mc.path = path
 
     # Rename: update dict key and cfg list entry
     if payload.name != name:
@@ -613,6 +681,141 @@ async def api_delete_key(name: str, request: Request) -> JSONResponse:
 
 
 # ------------------------------------------------------------------
+# Hosts
+# ------------------------------------------------------------------
+
+
+@app.get("/api/hosts")
+async def api_list_hosts() -> dict:  # type: ignore[type-arg]
+    """List all configured hosts."""
+    config = _get_config()
+    return {
+        "hosts": [
+            {"name": h.name, "hostname": h.hostname, "user": h.user, "port": h.port, "identity": h.identity}
+            for h in config.hosts
+        ]
+    }
+
+
+@app.post("/api/hosts")
+async def api_add_host(payload: HostPayload, request: Request) -> dict:  # type: ignore[type-arg]
+    """Create a new host configuration."""
+    _check_api_key(request)
+    config = _get_config()
+
+    # Check for duplicate name
+    if any(h.name == payload.name for h in config.hosts):
+        raise HTTPException(status_code=409, detail=f"Host '{payload.name}' already exists")
+
+    host = HostConfig(
+        name=payload.name,
+        hostname=payload.hostname,
+        user=payload.user,
+        port=payload.port,
+        identity=payload.identity,
+    )
+    config.hosts.append(host)
+    config.save()
+    return {"name": host.name, "hostname": host.hostname, "user": host.user, "port": host.port}
+
+
+@app.put("/api/hosts/{name}")
+async def api_update_host(name: str, payload: HostPayload, request: Request) -> dict:  # type: ignore[type-arg]
+    """Update a host configuration."""
+    _check_api_key(request)
+    config = _get_config()
+
+    host = next((h for h in config.hosts if h.name == name), None)
+    if host is None:
+        raise HTTPException(status_code=404, detail=f"Host '{name}' not found")
+
+    host.hostname = payload.hostname
+    host.user = payload.user
+    host.port = payload.port
+    host.identity = payload.identity
+    config.save()
+    return {"name": host.name, "hostname": host.hostname, "user": host.user, "port": host.port}
+
+
+@app.delete("/api/hosts/{name}")
+async def api_delete_host(name: str, request: Request) -> JSONResponse:
+    """Delete a host configuration."""
+    _check_api_key(request)
+    config = _get_config()
+
+    # Check if any mount or sync references this host
+    for m in config.mounts:
+        if m.host_name == name:
+            raise HTTPException(status_code=409, detail=f"Host '{name}' is referenced by mount '{m.name}'")
+    for s in config.syncs:
+        if s.source_host == name or s.target_host == name:
+            raise HTTPException(status_code=409, detail=f"Host '{name}' is referenced by sync '{s.name}'")
+
+    config.hosts = [h for h in config.hosts if h.name != name]
+    config.save()
+    return _htmx_json({"name": name, "deleted": True}, toast=f'Host "{name}" deleted')
+
+
+@app.get("/api/hosts/{name}/browse")
+async def api_browse_remote(name: str, path: str = "/") -> dict:  # type: ignore[type-arg]
+    """List entries in a remote directory via SSH."""
+    config = _get_config()
+    host = next((h for h in config.hosts if h.name == name), None)
+    if host is None:
+        raise HTTPException(status_code=404, detail=f"Host '{name}' not found")
+
+    # Build SSH command: ssh -i key -p port user@hostname ls -1p path
+    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+    if host.port != 22:
+        cmd.extend(["-p", str(host.port)])
+    if host.identity:
+        cmd.extend(["-i", host.identity])
+    cmd.append(f"{host.user}@{host.hostname}")
+    cmd.extend(["ls", "-1p", "--color=never", path])
+
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await proc.communicate()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list remote directory: {e}")
+
+    if proc.returncode != 0:
+        error_msg = stderr.decode("utf-8", errors="ignore").strip()
+        raise HTTPException(status_code=500, detail=f"SSH error: {error_msg or 'unknown error'}")
+
+    # Parse output: lines ending with / are directories, others are files
+    entries = []
+    for line in stdout.decode("utf-8", errors="ignore").strip().split("\n"):
+        if not line:
+            continue
+        if line.endswith("/"):
+            entries.append({"name": line[:-1], "type": "dir"})
+        else:
+            entries.append({"name": line, "type": "file"})
+
+    return {"path": path, "entries": entries}
+
+
+@app.get("/api/browse")
+async def api_browse_local(path: str = "/") -> dict:  # type: ignore[type-arg]
+    """List entries in a local directory."""
+    p = Path(path)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {path}")
+
+    entries = []
+    try:
+        for item in sorted(p.iterdir()):
+            entries.append({"name": item.name, "type": "dir" if item.is_dir() else "file"})
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {path}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing directory: {e}")
+
+    return {"path": str(p), "entries": entries}
+
+
+# ------------------------------------------------------------------
 # Sync jobs
 # ------------------------------------------------------------------
 
@@ -628,11 +831,32 @@ async def api_add_sync(payload: SyncPayload, request: Request) -> dict:  # type:
     cfg = _get_config()
     if payload.name in sm.states:
         raise HTTPException(status_code=409, detail=f"Sync '{payload.name}' already exists")
+
+    # Resolve host+path for source and target if host names are provided
+    source = payload.source
+    target = payload.target
+    identity = payload.identity
+    source_host = payload.source_host
+    source_path = payload.source_path
+    target_host = payload.target_host
+    target_path = payload.target_path
+
+    if source_host:
+        source, src_identity = _resolve_remote(source_host, source_path)
+        if not identity:
+            identity = src_identity
+    if target_host:
+        target, tgt_identity = _resolve_remote(target_host, target_path)
+        if not identity:
+            identity = tgt_identity
+
     sc = SyncConfig(
-        name=payload.name, source=payload.source, target=payload.target,
+        name=payload.name, source=source, target=target,
         interval=payload.interval, options=payload.options,
-        identity=payload.identity or None, enabled=payload.enabled,
+        identity=identity or None, enabled=payload.enabled,
         sync_tool=payload.sync_tool,
+        source_host=source_host, source_path=source_path,
+        target_host=target_host, target_path=target_path,
     )
     cfg.syncs.append(sc)
     sm.states[sc.name] = SyncState(config=sc)
@@ -649,13 +873,37 @@ async def api_update_sync(name: str, payload: SyncPayload, request: Request) -> 
     if state is None:
         raise HTTPException(status_code=404, detail=f"Sync '{name}' not found")
     sc = state.config
-    sc.source = payload.source
-    sc.target = payload.target
+
+    # Resolve host+path for source and target if host names are provided
+    source = payload.source
+    target = payload.target
+    identity = payload.identity
+    source_host = payload.source_host
+    source_path = payload.source_path
+    target_host = payload.target_host
+    target_path = payload.target_path
+
+    if source_host:
+        source, src_identity = _resolve_remote(source_host, source_path)
+        if not identity:
+            identity = src_identity
+    if target_host:
+        target, tgt_identity = _resolve_remote(target_host, target_path)
+        if not identity:
+            identity = tgt_identity
+
+    sc.source = source
+    sc.target = target
     sc.interval = payload.interval
     sc.options = payload.options
-    sc.identity = payload.identity or None
+    sc.identity = identity or None
     sc.enabled = payload.enabled
     sc.sync_tool = payload.sync_tool
+    sc.source_host = source_host
+    sc.source_path = source_path
+    sc.target_host = target_host
+    sc.target_path = target_path
+
     if payload.name != name:
         if payload.name in sm.states:
             raise HTTPException(status_code=409, detail=f"Sync '{payload.name}' already exists")
@@ -779,12 +1027,31 @@ async def api_start_transfer(payload: TransferPayload, request: Request) -> JSON
             status_code=400,
             detail=f"Invalid protocol '{payload.protocol}'. Choose from: {', '.join(sorted(valid))}",
         )
+
+    # Resolve host+path for source and dest if host names are provided
+    source = payload.source
+    dest = payload.dest
+    identity = payload.identity
+    source_host = payload.source_host
+    source_path = payload.source_path
+    dest_host = payload.dest_host
+    dest_path = payload.dest_path
+
+    if source_host:
+        source, src_identity = _resolve_remote(source_host, source_path)
+        if not identity:
+            identity = src_identity
+    if dest_host:
+        dest, dst_identity = _resolve_remote(dest_host, dest_path)
+        if not identity:
+            identity = dst_identity
+
     req = TransferRequest(
         protocol=payload.protocol,
-        source=payload.source,
-        dest=payload.dest,
+        source=source,
+        dest=dest,
         move=payload.move,
-        identity=payload.identity or None,
+        identity=identity or None,
         options=payload.options,
     )
     tid = await tm.start(req)

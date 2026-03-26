@@ -23,6 +23,17 @@ CONFIG_SEARCH_PATHS = [
 
 
 @dataclass
+class HostConfig:
+    """Remote SSH host definition."""
+
+    name: str
+    hostname: str
+    user: str
+    port: int = 22
+    identity: Optional[str] = None
+
+
+@dataclass
 class MountConfig:
     name: str
     remote: str
@@ -32,6 +43,8 @@ class MountConfig:
     identity_passphrase: Optional[str] = None
     enabled: bool = True
     mount_tool: str = "sshfs"  # "sshfs" | "rclone"
+    host_name: str = ""  # references HostConfig.name; empty = manual remote string
+    path: str = ""  # path on the remote host (used with host_name)
 
 
 @dataclass
@@ -80,6 +93,10 @@ class SyncConfig:
     enabled: bool = True
     sync_tool: str = "rsync"  # "rsync" | "lsyncd"
     targets: list[str] = field(default_factory=list)  # additional targets to sync to
+    source_host: str = ""  # references HostConfig.name for source; empty = manual
+    source_path: str = ""  # path on source host (used with source_host)
+    target_host: str = ""  # references HostConfig.name for target; empty = manual
+    target_path: str = ""  # path on target host (used with target_host)
 
 
 @dataclass
@@ -87,6 +104,7 @@ class AppConfig:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
     notifications: NotificationsConfig = field(default_factory=NotificationsConfig)
+    hosts: list[HostConfig] = field(default_factory=list)
     mounts: list[MountConfig] = field(default_factory=list)
     syncs: list[SyncConfig] = field(default_factory=list)
     _path: Optional[Path] = field(default=None, repr=False, compare=False)
@@ -158,9 +176,22 @@ class AppConfig:
         lines.append(f"on_recovery = {'true' if self.notifications.on_recovery else 'false'}")
         lines.append(f"on_backoff = {'true' if self.notifications.on_backoff else 'false'}")
         lines.append("")
+        for h in self.hosts:
+            lines.append("[[host]]")
+            lines.append(f'name = "{h.name}"')
+            lines.append(f'hostname = "{h.hostname}"')
+            lines.append(f'user = "{h.user}"')
+            if h.port != 22:
+                lines.append(f"port = {h.port}")
+            if h.identity:
+                lines.append(f'identity = "{h.identity}"')
+            lines.append("")
         for m in self.mounts:
             lines.append("[[mount]]")
             lines.append(f'name = "{m.name}"')
+            if m.host_name:
+                lines.append(f'host_name = "{m.host_name}"')
+                lines.append(f'path = "{m.path}"')
             lines.append(f'remote = "{m.remote}"')
             lines.append(f'local = "{m.local}"')
             lines.append(f'options = "{m.options}"')
@@ -176,6 +207,12 @@ class AppConfig:
         for s in self.syncs:
             lines.append("[[sync]]")
             lines.append(f'name = "{s.name}"')
+            if s.source_host:
+                lines.append(f'source_host = "{s.source_host}"')
+                lines.append(f'source_path = "{s.source_path}"')
+            if s.target_host:
+                lines.append(f'target_host = "{s.target_host}"')
+                lines.append(f'target_path = "{s.target_path}"')
             lines.append(f'source = "{s.source}"')
             lines.append(f'target = "{s.target}"')
             lines.append(f"interval = {s.interval}")
@@ -282,6 +319,7 @@ class AppConfig:
         daemon = DaemonConfig(**raw.get("daemon", {}))
         api = ApiConfig(**raw.get("api", {}))
         notifications = NotificationsConfig(**raw.get("notifications", {}))
+        hosts = [HostConfig(**h) for h in raw.get("host", [])]
         mounts = [MountConfig(**m) for m in raw.get("mount", [])]
         syncs = [SyncConfig(**s) for s in raw.get("sync", [])]
 
@@ -301,9 +339,10 @@ class AppConfig:
                         import shutil as _shutil
                         _shutil.copy2(bak_path, path)
                         mounts = bak_mounts
+                        hosts = [HostConfig(**h) for h in bak_raw.get("host", [])]
                 except Exception as e:
                     log.error("Failed to restore from backup: %s", e)
 
-        obj = cls(daemon=daemon, api=api, notifications=notifications, mounts=mounts, syncs=syncs)
+        obj = cls(daemon=daemon, api=api, notifications=notifications, hosts=hosts, mounts=mounts, syncs=syncs)
         obj._path = path
         return obj
