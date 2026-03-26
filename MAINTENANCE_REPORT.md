@@ -1,5 +1,15 @@
 # Maintenance Report
 
+## 2026-03-26 — Fix sync edit form identity field handling
+
+**AI Model**: claude-haiku-4-5
+**Actions Taken**:
+- **Fixed sync edit form**: Updated `openSyncModal()` to accept and preserve `identity` parameter when editing existing syncs
+- **Updated sync card**: Modified `_sync_card.html` Edit button to pass `s.identity` value when opening the modal
+- **Result**: Syncs with SSH key identity settings now retain their configuration when edited; 422 validation errors resolved
+
+**Oversight**: All 152 tests pass; syncs can now be created and edited without losing SSH key identity settings.
+
 ## 2026-03-25 — Multi-target sync implementation (continued)
 
 **AI Model**: claude-haiku-4-5
