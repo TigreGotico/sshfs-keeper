@@ -783,7 +783,7 @@
   }
 
   // ---- sync modal ----
-  function openSyncModal(name, source, target, interval, options, syncTool, targets) {
+  function openSyncModal(name, source, target, interval, options, syncTool, targets, identity) {
     const editing = !!name;
     document.getElementById('sync-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Sync Job';
     document.getElementById('sync-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Sync Job';
@@ -795,6 +795,7 @@
     document.getElementById('s-interval').value = interval || 3600;
     document.getElementById('s-options').value = options || '-az --delete --stats';
     document.getElementById('s-sync-tool').value = syncTool || 'rsync';
+    document.getElementById('s-identity').value = identity || '';
     document.getElementById('s-enabled').checked = true;
     // Populate additional targets
     const targetsList = document.getElementById('s-targets-list');
