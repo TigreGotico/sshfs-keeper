@@ -1,5 +1,24 @@
 # Maintenance Report
 
+## 2026-03-26 — Host entities and config auto-migration
+
+**AI Model**: claude-haiku-4-5
+**Actions Taken**:
+- **Added HostConfig dataclass** (`sshfs_keeper/config.py`): Structured SSH host definition with `name`, `hostname`, `user`, `port`, `identity` fields
+- **Extended AppConfig**: Added `hosts: list[HostConfig]` to centralize host definitions
+- **Extended MountConfig/SyncConfig**: Added `host_name`, `path` (and `source_host/source_path/target_host/target_path` for syncs) fields to reference hosts instead of embedding `user@host` in free-text strings
+- **Implemented config auto-migration** (`AppConfig._migrate_to_hosts()`): When loading old configs without explicit hosts, the loader parses free-text `remote`/`source`/`target` strings, creates `HostConfig` entries for unique hosts, and updates mounts/syncs to reference them — transparent to users
+- **Updated save() method**: TOML serialization now writes `[[host]]` sections before mounts/syncs; preserves `remote`/`source`/`target` strings for readability
+- **API changes**: Updated `HostPayload`, `MountPayload`, `SyncPayload` models; added endpoints for host CRUD (`GET/POST /api/hosts`, `PUT/DELETE /api/hosts/{name}`)
+- **File browsing**: Added remote file browser endpoints (`GET /api/hosts/{name}/browse?path=/` for SSH, `GET /api/browse?path=/` for local)
+- **Frontend refactor**: Mount/sync/transfer modals replaced free-text remote inputs with host dropdown + path input pairs; added file browser modal for path selection
+- **Test coverage**: Added 6 new tests in `test/test_config.py` verifying migration logic (single host parse, multi-host reuse, end-to-end load of old config file)
+- **Updated FAQ**: Added "How do I define remote hosts explicitly?" and "What happens to my old config when I upgrade?" sections documenting host entities and auto-migration
+
+**Result**: Users can define hosts once and reuse across mounts/syncs; web UI provides structured host selection + file browser instead of manual `user@host:/path` entry. Existing configs auto-migrate transparently on load with no user action required.
+
+**Oversight**: All 158 tests pass (6 new migration tests + 152 prior tests); end-to-end migration tested via `test_migrate_load_old_config_file` loading a pre-migration config and verifying host creation and mount/sync reference updates.
+
 ## 2026-03-26 — Transfers feature restoration and verification
 
 **AI Model**: claude-haiku-4-5

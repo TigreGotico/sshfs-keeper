@@ -17,6 +17,8 @@
       <span class="badge badge-error">✗ failed</span>
     {% elif t.status == 'cancelled' %}
       <span class="badge badge-disabled">— cancelled</span>
+    {% elif t.status == 'interrupted' %}
+      <span class="badge badge-stale">⚡ interrupted</span>
     {% else %}
       <span class="badge badge-idle">{{ t.status }}</span>
     {% endif %}
@@ -44,7 +46,7 @@
               hx-delete="/api/transfers/{{ t.id }}"
               hx-swap="none"
               hx-on::after-request="htmx.trigger('#transfers-table tbody','refresh')">✕</button>
-      {% elif t.status in ('failed', 'cancelled') and t.protocol in ('rsync_ssh', 'local') %}
+      {% elif t.status in ('failed', 'cancelled', 'interrupted') and t.protocol in ('rsync_ssh', 'local') %}
       <button class="btn" style="font-size:0.75rem;padding:0.25rem 0.6rem;color:var(--accent)"
               hx-post="/api/transfers/{{ t.id }}/resume"
               hx-swap="none"

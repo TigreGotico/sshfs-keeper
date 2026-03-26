@@ -205,7 +205,7 @@
     .tab-panel.active { display: block; }
 
     /* ---- cards ---- */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
     .card-header { padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid var(--border); }
     .card-name { font-weight: 600; font-size: 0.9rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -251,7 +251,7 @@
     .add-btn-row { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
 
     /* ---- settings panel ---- */
-    .settings-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; max-width: 480px; display: grid; gap: 0.75rem; }
+    .settings-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; display: grid; gap: 0.75rem; }
     .settings-form label { font-size: 0.8rem; color: var(--label); display: block; margin-bottom: 0.2rem; }
     .settings-form input { width: 100%; background: var(--input); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 5px; font-size: 0.85rem; }
     .settings-form select { width: 100%; }
@@ -336,6 +336,7 @@
     <div class="tab" onclick="switchTab('transfers')">Transfers</div>
     <div class="tab" onclick="switchTab('hosts')">Hosts</div>
     <div class="tab" onclick="switchTab('keys')">SSH Keys</div>
+    <div class="tab" onclick="switchTab('logs')">Logs</div>
     <div class="tab" onclick="switchTab('settings')">Settings</div>
     <div class="tab" onclick="switchTab('notifications')">Notifications</div>
   </div>
@@ -406,10 +407,10 @@
           <label>Mode</label>
           <div style="display:flex;gap:1rem;align-items:center;margin-top:0.4rem">
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="move" id="tr-copy" value="false" checked onchange="document.getElementById('tr-move').value=false"> Copy
+              <input type="radio" id="tr-copy" checked onchange="document.getElementById('tr-move').value='false'"> Copy
             </label>
             <label style="display:flex;gap:0.4rem;align-items:center;cursor:pointer">
-              <input type="radio" name="move" id="tr-move-radio" value="true" onchange="document.getElementById('tr-move').value=true"> Move <span style="font-size:0.72rem;color:var(--dimmed)">(deletes source after transfer)</span>
+              <input type="radio" id="tr-move-radio" onchange="document.getElementById('tr-move').value='true'"> Move <span style="font-size:0.72rem;color:var(--dimmed)">(deletes source after transfer)</span>
             </label>
           </div>
           <input type="hidden" name="move" id="tr-move" value="false">
@@ -418,18 +419,32 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
         <div>
-          <label>Source</label>
-          <input type="text" name="source" id="tr-source"
-                 placeholder="user@host:/path/to/source" autocomplete="off" required>
-          <span class="hint" id="tr-source-hint">Format: <code>user@host:/path</code> — e.g. <code>alice@192.168.1.10:/media/data/photos</code></span>
+          <label>Source host</label>
+          <select name="source_host" id="tr-source-host" style="background:var(--input);padding:0.4rem;border:1px solid var(--border);border-radius:4px;color:var(--text);width:100%">
+            <option value="">local (this machine)</option>
+            {% for h in hosts %}<option value="{{ h.name }}">{{ h.name }} ({{ h.user }}@{{ h.hostname }})</option>{% endfor %}
+          </select>
+          <div style="display:flex;gap:0.5rem;margin-top:0.3rem">
+            <input type="text" name="source_path" id="tr-source-path" placeholder="/data/photos" style="flex:1">
+            <button type="button" class="btn btn-sm btn-muted" onclick="openFileBrowser('tr-source-path', document.getElementById('tr-source-host').value)" style="white-space:nowrap">Browse</button>
+          </div>
+          <span class="hint" id="tr-source-hint">Select the source host and path</span>
         </div>
         <div>
-          <label>Destination</label>
-          <input type="text" name="dest" id="tr-dest"
-                 placeholder="/mnt/backup/photos" autocomplete="off" required>
-          <span class="hint" id="tr-dest-hint">Local path or <code>user@host:/path</code> for a remote destination</span>
+          <label>Destination host</label>
+          <select name="dest_host" id="tr-dest-host" style="background:var(--input);padding:0.4rem;border:1px solid var(--border);border-radius:4px;color:var(--text);width:100%">
+            <option value="">local (this machine)</option>
+            {% for h in hosts %}<option value="{{ h.name }}">{{ h.name }} ({{ h.user }}@{{ h.hostname }})</option>{% endfor %}
+          </select>
+          <div style="display:flex;gap:0.5rem;margin-top:0.3rem">
+            <input type="text" name="dest_path" id="tr-dest-path" placeholder="/backup/photos" style="flex:1">
+            <button type="button" class="btn btn-sm btn-muted" onclick="openFileBrowser('tr-dest-path', document.getElementById('tr-dest-host').value)" style="white-space:nowrap">Browse</button>
+          </div>
+          <span class="hint" id="tr-dest-hint">Select the destination host and path</span>
         </div>
       </div>
+      <input type="hidden" name="source" id="tr-source">
+      <input type="hidden" name="dest" id="tr-dest">
 
       <div id="tr-identity-row">
         <label>SSH Identity Key <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
@@ -463,10 +478,8 @@
       <table id="transfers-table" style="width:100%;border-collapse:collapse;font-size:0.8rem">
         <thead>
           <tr style="color:var(--label);border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">ID</th>
             <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Protocol</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Source</th>
-            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Destination</th>
+            <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Source / Destination</th>
             <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Status</th>
             <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Progress</th>
             <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:500">Time</th>
@@ -478,7 +491,7 @@
                hx-trigger="refresh, every 3s"
                hx-swap="innerHTML"
                hx-indicator="#transfers-indicator">
-          <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
+          <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--dimmed)">No transfers yet — start one above.</td></tr>
         </tbody>
       </table>
     </div>
@@ -487,38 +500,40 @@
   <!-- ===== HOSTS TAB ===== -->
   <div class="tab-panel" id="tab-hosts">
     <p style="font-size:0.82rem;color:var(--dimmed);margin-bottom:1rem;line-height:1.6">
-      A <strong>host</strong> is a remote SSH server that you want to mount, sync, or transfer files to. Define hosts once and reuse them in mounts, syncs, and transfers. Each host can have a default SSH key identity.
+      Define remote SSH servers once and reuse them across mounts, syncs, and transfers.
     </p>
-    <div class="add-btn-row">
-      <button class="btn btn-primary" onclick="openHostModal()">+ Add Host</button>
+    <div>
+      <div class="add-btn-row">
+        <button class="btn btn-primary" onclick="openHostModal()">+ Add Host</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:0.5rem;color:var(--label)">Name</th>
+            <th style="text-align:left;padding:0.5rem;color:var(--label)">Connection</th>
+            <th style="text-align:left;padding:0.5rem;color:var(--label)">SSH Key</th>
+            <th style="text-align:right;padding:0.5rem;color:var(--label)">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in hosts %}
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:0.5rem;font-weight:600">{{ h.name }}</td>
+            <td style="padding:0.5rem;font-family:monospace;font-size:0.75rem">{{ h.user }}@{{ h.hostname }}{% if h.port != 22 %}:{{ h.port }}{% endif %}</td>
+            <td style="padding:0.5rem;color:var(--dimmed);font-size:0.75rem">{{ h.identity.split('/')[-1] if h.identity else '(default)' }}</td>
+            <td style="padding:0.5rem;text-align:right;white-space:nowrap">
+              <button class="btn btn-sm btn-muted" onclick="openHostModal('{{ h.name }}','{{ h.hostname }}','{{ h.user }}',{{ h.port }},'{{ h.identity or '' }}')">Edit</button>
+              <button class="btn btn-sm btn-danger" type="button" onclick="deleteHost('{{ h.name }}')">Delete</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" style="text-align:center;padding:2rem;color:var(--dimmed)">No hosts configured yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
-      <thead>
-        <tr style="border-bottom:1px solid var(--border)">
-          <th style="text-align:left;padding:0.5rem;color:var(--label)">Name</th>
-          <th style="text-align:left;padding:0.5rem;color:var(--label)">Connection</th>
-          <th style="text-align:left;padding:0.5rem;color:var(--label)">SSH Key</th>
-          <th style="text-align:left;padding:0.5rem;color:var(--label)">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in hosts %}
-        <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:0.5rem">{{ h.name }}</td>
-          <td style="padding:0.5rem">{{ h.user }}@{{ h.hostname }}{% if h.port != 22 %}:{{ h.port }}{% endif %}</td>
-          <td style="padding:0.5rem;color:var(--dimmed)">{{ h.identity if h.identity else '(default)' }}</td>
-          <td style="padding:0.5rem">
-            <button class="btn btn-sm btn-muted" onclick="openHostModal('{{ h.name }}','{{ h.hostname }}','{{ h.user }}',{{ h.port }},'{{ h.identity or '' }}')">Edit</button>
-            <button class="btn btn-sm btn-danger" hx-delete="/api/hosts/{{ h.name | urlencode }}" hx-confirm="Delete host &quot;{{ h.name }}&quot;?" hx-swap="none" hx-on::after-request="location.reload()">Delete</button>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="4" style="text-align:center;padding:2rem;color:var(--dimmed)">No hosts configured yet.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
 
   <!-- ===== SSH KEYS TAB ===== -->
@@ -539,6 +554,25 @@
       <div>🔒 Drop your private key file here or <strong>click to browse</strong></div>
       <div style="margin-top:0.4rem;font-size:0.75rem">Upload the <strong>private</strong> key (the file without <code>.pub</code>). Stored securely at <code>~/.config/sshfs-keeper/keys/</code> with permissions 600.</div>
     </label>
+  </div>
+
+  <!-- ===== LOGS TAB ===== -->
+  <div class="tab-panel" id="tab-logs">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+      <p style="font-size:0.82rem;color:var(--dimmed);margin:0">
+        Live daemon log output. Auto-refreshes every 3 seconds while this tab is active.
+      </p>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <select id="log-level-filter" onchange="filterLogs()" style="background:var(--input);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.3rem 0.5rem;font-size:0.75rem">
+          <option value="">All levels</option>
+          <option value="ERROR">Errors only</option>
+          <option value="WARNING">Warnings+</option>
+          <option value="INFO">Info+</option>
+        </select>
+        <button class="btn btn-sm btn-muted" onclick="loadLogs()">Refresh</button>
+      </div>
+    </div>
+    <div id="log-viewer" style="background:var(--input);border:1px solid var(--border);border-radius:8px;padding:0.75rem;font-family:monospace;font-size:0.72rem;line-height:1.6;height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--text2)">Loading…</div>
   </div>
 
   <!-- ===== NOTIFICATIONS TAB ===== -->
@@ -651,36 +685,44 @@
 <div class="overlay" id="host-overlay" onclick="if(event.target===this)closeHostModal()">
   <div class="modal">
     <h2 id="host-modal-title">Add Host</h2>
-    <form hx-post="/api/hosts" hx-swap="none" hx-on::after-request="closeHostModal();location.reload()">
-      <input type="hidden" id="h-editing" name="_editing">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
-        <div>
-          <label>Name (e.g., <code>nas</code>, <code>backup</code>)</label>
-          <input type="text" id="h-name" name="name" required disabled style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
-        </div>
-        <div>
-          <label>Hostname or IP</label>
-          <input type="text" id="h-hostname" name="hostname" placeholder="192.168.1.10 or nas.local" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
-        </div>
-        <div>
-          <label>SSH User</label>
-          <input type="text" id="h-user" name="user" placeholder="miro" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
-        </div>
-        <div>
-          <label>SSH Port</label>
-          <input type="number" id="h-port" name="port" value="22" min="1" max="65535" required style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
-        </div>
+    <p class="modal-subtitle">Define a remote SSH server once and reuse it across mounts, syncs, and transfers.</p>
+    <form id="host-form" class="form-grid"
+          hx-ext="json-enc"
+          hx-post="/api/hosts"
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){closeHostModal();location.reload()}">
+      <input type="hidden" id="h-editing" value="">
+      <div class="field">
+        <label>Name <span style="color:#fca5a5">*</span></label>
+        <input id="h-name" name="name" placeholder="nas" required>
+        <span class="hint">A short label — like <code>nas</code>, <code>backup</code>, or <code>work-server</code>. Used to reference this host in mounts and syncs.</span>
       </div>
-      <div style="margin-bottom:1.5rem">
-        <label>Default SSH Key Identity (optional)</label>
-        <select id="h-identity" name="identity" style="background:var(--input);padding:0.4rem;width:100%;border:1px solid var(--border);border-radius:4px;color:var(--text)">
-          <option value="">(system default key)</option>
+      <div class="field">
+        <label>Hostname or IP <span style="color:#fca5a5">*</span></label>
+        <input id="h-hostname" name="hostname" placeholder="192.168.1.10 or nas.local" required>
+        <span class="hint">The network address of the server. Can be an IP address or a DNS hostname.</span>
+      </div>
+      <div class="field">
+        <label>SSH User <span style="color:#fca5a5">*</span></label>
+        <input id="h-user" name="user" placeholder="miro" required>
+        <span class="hint">The username to log in as on the remote server.</span>
+      </div>
+      <div class="field">
+        <label>SSH Port</label>
+        <input id="h-port" name="port" type="number" value="22" min="1" max="65535" style="width:6rem">
+        <span class="hint">Default is 22. Only change this if your SSH server listens on a non-standard port.</span>
+      </div>
+      <div class="field">
+        <label>SSH key <span style="color:#94a3b8;font-weight:400">(optional)</span></label>
+        <select id="h-identity" name="identity">
+          <option value="">— use SSH agent or default key (~/.ssh/id_*) —</option>
           {% for k in keys %}<option value="{{ config_dir }}/keys/{{ k }}">{{ k }}</option>{% endfor %}
         </select>
+        <span class="hint">If this host requires a specific SSH key, select it here. Upload keys in the <strong>SSH Keys</strong> tab.</span>
       </div>
-      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+      <div class="modal-footer" style="margin-top:0">
         <button type="button" class="btn btn-muted" onclick="closeHostModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save Host</button>
+        <button type="submit" class="btn btn-primary" id="host-modal-save-btn">Add Host</button>
       </div>
     </form>
   </div>
@@ -693,6 +735,7 @@
     <p class="modal-subtitle" id="mount-modal-subtitle">Make a remote folder appear as a local drive on this machine. sshfs-keeper will keep it mounted and automatically reconnect if the connection drops.</p>
     <form id="mount-form" class="form-grid"
           hx-ext="json-enc"
+          hx-post="/api/mounts"
           hx-swap="none"
           hx-on::after-request="if(event.detail.successful){closeMountModal();htmx.trigger('#mounts-grid','refresh')}">
       <input type="hidden" name="_editing" id="m-editing" value="">
@@ -702,22 +745,27 @@
         <span class="hint">A short label you'll recognise — like <code>nas</code>, <code>backup-drive</code>, or <code>work-server</code>. No spaces.</span>
       </div>
       <div class="field">
-        <label>Connection type</label>
-        <select id="m-protocol" onchange="applyProtocolTemplate()">
-          <option value="sftp">SSH / SFTP — Linux, NAS, Raspberry Pi, any server with SSH</option>
-          <option value="ftp">FTP — older servers and some NAS devices</option>
-          <option value="webdav">WebDAV — Nextcloud, ownCloud, Windows shares over HTTP</option>
-          <option value="smb">SMB / CIFS — Windows shares, Samba, most NAS web UIs</option>
-          <option value="rclone">rclone remote — S3, Google Drive, Dropbox, or a pre-configured rclone remote</option>
-          <option value="custom">Custom — I know what I'm doing</option>
+        <label>Host <span style="color:#fca5a5">*</span></label>
+        <select id="m-host" name="host_name" onchange="onMountHostChange()" style="background:var(--input);padding:0.4rem;border:1px solid var(--border);border-radius:4px;color:var(--text);width:100%">
+          <option value="">— manual (enter remote string) —</option>
+          {% for h in hosts %}<option value="{{ h.name }}">{{ h.name }} ({{ h.user }}@{{ h.hostname }}{% if h.port != 22 %}:{{ h.port }}{% endif %})</option>{% endfor %}
         </select>
-        <span class="hint" id="m-proto-hint">SSH is the most common choice for Linux servers and NAS devices. It encrypts your connection automatically.</span>
+        <span class="hint">Select a saved host, or choose "manual" to enter a raw connection string.</span>
       </div>
-      <div class="field">
+      <div class="field" id="m-path-field" style="display:none">
+        <label>Path on host <span style="color:#fca5a5">*</span></label>
+        <div style="display:flex;gap:0.5rem">
+          <input id="m-path" name="path" placeholder="/media/photos" style="flex:1">
+          <button type="button" class="btn btn-sm btn-muted" onclick="openFileBrowser('m-path', document.getElementById('m-host').value)" style="white-space:nowrap">Browse</button>
+        </div>
+        <span class="hint">The remote folder you want to mount.</span>
+      </div>
+      <div class="field" id="m-manual-field" style="display:none">
         <label>Address &amp; path on the remote <span style="color:#fca5a5">*</span></label>
-        <input id="m-remote" name="remote" placeholder="user@192.168.1.1:/media/data">
-        <span class="hint" id="m-remote-hint">Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/mnt/storage</code></span>
+        <input id="m-remote-manual" placeholder="user@192.168.1.1:/media/data">
+        <span class="hint">Format: <code>username@server-address:/folder/path</code></span>
       </div>
+      <input type="hidden" id="m-remote" name="remote">
       <div class="field">
         <label>Where to mount it on this computer <span style="color:#fca5a5">*</span></label>
         <input id="m-local" name="local" placeholder="/mnt/my-nas">
@@ -765,6 +813,7 @@
     <p class="modal-subtitle">Automatically copy files from one place to another on a schedule. Great for backups, mirroring, or keeping two folders in sync.</p>
     <form id="sync-form" class="form-grid"
           hx-ext="json-enc"
+          hx-post="/api/syncs"
           hx-swap="none"
           hx-on::after-request="if(event.detail.successful){closeSyncModal();htmx.trigger('#syncs-grid','refresh')}">
       <input type="hidden" name="_editing" id="s-editing" value="">
@@ -775,14 +824,37 @@
       </div>
       <div class="field">
         <label>Source — copy files FROM here <span style="color:#fca5a5">*</span></label>
-        <input id="s-source" name="source" placeholder="/mnt/nas/photos/">
-        <span class="hint">A folder on this machine or a remote path like <code>user@server:/data/</code>. Include a trailing slash to sync folder contents (not the folder itself).</span>
+        <select id="s-source-host" name="source_host" onchange="onSyncSourceHostChange()" style="background:var(--input);padding:0.4rem;border:1px solid var(--border);border-radius:4px;color:var(--text);width:100%">
+          <option value="">local (this machine)</option>
+          {% for h in hosts %}<option value="{{ h.name }}">{{ h.name }} ({{ h.user }}@{{ h.hostname }})</option>{% endfor %}
+        </select>
+        <span class="hint">Select the host where the source files are, or "local" for folders on this machine.</span>
       </div>
+      <div class="field" id="s-source-path-field">
+        <label style="font-size:0.85rem;color:var(--dimmed)">Source path</label>
+        <div style="display:flex;gap:0.5rem">
+          <input id="s-source-path" name="source_path" placeholder="/data/photos/" style="flex:1">
+          <button type="button" class="btn btn-sm btn-muted" onclick="openFileBrowser('s-source-path', document.getElementById('s-source-host').value)" style="white-space:nowrap">Browse</button>
+        </div>
+      </div>
+      <input type="hidden" id="s-source" name="source">
+
       <div class="field">
         <label>Destination — copy files TO here <span style="color:#fca5a5">*</span></label>
-        <input id="s-target" name="target" placeholder="/mnt/backup/photos/">
-        <span class="hint">Where the copies end up. Can be a local folder or a remote path like <code>user@server:/backup/</code>.</span>
+        <select id="s-target-host" name="target_host" onchange="onSyncTargetHostChange()" style="background:var(--input);padding:0.4rem;border:1px solid var(--border);border-radius:4px;color:var(--text);width:100%">
+          <option value="">local (this machine)</option>
+          {% for h in hosts %}<option value="{{ h.name }}">{{ h.name }} ({{ h.user }}@{{ h.hostname }})</option>{% endfor %}
+        </select>
+        <span class="hint">Select where to copy the files, or "local" for a folder on this machine.</span>
       </div>
+      <div class="field" id="s-target-path-field">
+        <label style="font-size:0.85rem;color:var(--dimmed)">Target path</label>
+        <div style="display:flex;gap:0.5rem">
+          <input id="s-target-path" name="target_path" placeholder="/backup/photos/" style="flex:1">
+          <button type="button" class="btn btn-sm btn-muted" onclick="openFileBrowser('s-target-path', document.getElementById('s-target-host').value)" style="white-space:nowrap">Browse</button>
+        </div>
+      </div>
+      <input type="hidden" id="s-target" name="target">
       <div class="field">
         <label>How often to sync</label>
         <input id="s-interval-min" type="number" value="60" min="1" style="width:6rem">
@@ -837,12 +909,25 @@
   </div>
 </div>
 
+<!-- ===== FILE BROWSER MODAL ===== -->
+<div class="overlay" id="browser-overlay" onclick="if(event.target===this)closeBrowserModal()">
+  <div class="modal" style="width:min(500px,95vw)">
+    <h2>Browse Files</h2>
+    <div style="background:var(--input);padding:0.5rem;border-radius:4px;font-family:monospace;font-size:0.75rem;margin-bottom:1rem;word-break:break-all" id="browser-path">/</div>
+    <div id="browser-list" style="height:250px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--surface);margin-bottom:1rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-muted" onclick="closeBrowserModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="selectBrowserPath()">Select</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
   // ---- tabs (minimal JS — CSS only alternative would need :target anchors) ----
   function switchTab(name) {
-    const panels = ['mounts','syncs','transfers','hosts','keys','settings','notifications'];
+    const panels = ['mounts','syncs','transfers','hosts','keys','logs','settings','notifications'];
     document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', panels[i] === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   }
@@ -863,16 +948,7 @@
   function openHostModal(name, hostname, user, port, identity) {
     const editing = !!name;
     document.getElementById('host-modal-title').textContent = editing ? `Edit Host — ${name}` : 'Add Host';
-    const form = document.querySelector('#host-overlay form');
-    if (editing) {
-      form.setAttribute('hx-put', `/api/hosts/${encodeURIComponent(name)}`);
-      form.setAttribute('hx-post', null);
-      document.getElementById('h-name').disabled = true;
-    } else {
-      form.setAttribute('hx-post', '/api/hosts');
-      form.removeAttribute('hx-put');
-      document.getElementById('h-name').disabled = false;
-    }
+    document.getElementById('host-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Host';
     document.getElementById('h-name').value = name || '';
     document.getElementById('h-hostname').value = hostname || '';
     document.getElementById('h-user').value = user || '';
@@ -882,137 +958,91 @@
     document.getElementById('host-overlay').classList.add('open');
   }
   function closeHostModal() { document.getElementById('host-overlay').classList.remove('open'); }
+  function deleteHost(name) {
+    if (!confirm(`Delete host "${name}"?`)) return;
+    fetch(`/api/hosts/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      .then(r => {
+        if (r.ok) { toast(`Host "${name}" deleted`); location.reload(); }
+        else r.json().then(d => toast(d.detail || 'Delete failed', false));
+      })
+      .catch(() => toast('Delete failed', false));
+  }
 
   // ---- mount modal ----
-  function openMountModal(name, remote, local, mountTool) {
+  function onMountHostChange() {
+    const hostSelected = document.getElementById('m-host').value;
+    document.getElementById('m-path-field').style.display = hostSelected ? 'block' : 'none';
+    document.getElementById('m-manual-field').style.display = hostSelected ? 'none' : 'block';
+  }
+
+  function openMountModal(name, remote, local, mountTool, hostName, path, identity) {
     const editing = !!name;
     document.getElementById('mount-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Mount';
     document.getElementById('mount-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Mount';
     document.getElementById('m-editing').value = name || '';
     document.getElementById('m-name').value = name || '';
-    document.getElementById('m-remote').value = remote || '';
     document.getElementById('m-local').value = local || '';
     document.getElementById('m-mount-tool').value = mountTool || 'sshfs';
+    document.getElementById('m-identity').value = identity || '';
+
+    // Set host/path or manual remote
+    if (hostName) {
+      document.getElementById('m-host').value = hostName;
+      document.getElementById('m-path').value = path || '';
+      document.getElementById('m-remote').value = remote || '';  // Hidden field for API
+    } else {
+      document.getElementById('m-host').value = '';
+      document.getElementById('m-remote-manual').value = remote || '';
+      document.getElementById('m-remote').value = remote || '';
+    }
+
     if (!editing) {
       document.getElementById('m-options').value = 'cache=yes,compression=yes,ServerAliveInterval=15,ServerAliveCountMax=3,reconnect';
       document.getElementById('m-enabled').checked = true;
-      document.getElementById('m-protocol').value = 'sftp';
-    } else {
-      // Detect protocol from existing remote value
-      const r = remote || '';
-      let proto = 'custom';
-      if (r.startsWith(':ftp,')) proto = 'ftp';
-      else if (r.startsWith(':webdav,')) proto = 'webdav';
-      else if (r.startsWith(':smb,')) proto = 'smb';
-      else if (/^[a-zA-Z][a-zA-Z0-9_-]*:/.test(r) && !r.includes('@')) proto = 'rclone';
-      else if (r.includes('@')) proto = 'sftp';
-      document.getElementById('m-protocol').value = proto;
     }
-    // Set form action based on add vs edit
-    const form = document.getElementById('mount-form');
-    if (editing) {
-      form.setAttribute('hx-put', `/api/mounts/${encodeURIComponent(name)}`);
-      form.removeAttribute('hx-post');
-    } else {
-      form.setAttribute('hx-post', '/api/mounts');
-      form.removeAttribute('hx-put');
-    }
-    htmx.process(form);  // re-process HTMX attributes after dynamic change
+
+    onMountHostChange();
     document.getElementById('mount-overlay').classList.add('open');
     document.getElementById('m-name').focus();
   }
   function closeMountModal() { document.getElementById('mount-overlay').classList.remove('open'); }
 
-  const PROTOCOL_TEMPLATES = {
-    sftp: {
-      remote: 'user@host:/path',
-      placeholder: 'alice@192.168.1.10:/mnt/storage',
-      tool: 'sshfs',
-      remoteHint: 'Format: <code>username@server-address:/folder/path</code> — e.g. <code>alice@192.168.1.10:/media/data</code>. Use the server\'s IP address or hostname.',
-      protoHint: 'SSH is the most common choice for Linux servers, NAS devices, and Raspberry Pis. It encrypts your connection automatically and works over your local network or the internet.',
-      toolHint: 'sshfs is the fastest option for SSH connections and requires no extra configuration.',
-    },
-    ftp: {
-      remote: ':ftp,host=HOST,user=USER,pass=PASS:/path',
-      placeholder: ':ftp,host=192.168.1.1,user=miro,pass=secret:/pub',
-      tool: 'rclone',
-      remoteHint: 'Replace <code>HOST</code>, <code>USER</code>, and <code>PASS</code> with your FTP server details. The path at the end is the folder on the server.',
-      protoHint: 'FTP is used by some older NAS devices and web hosting providers. It is not encrypted — use SFTP if your device supports it.',
-      toolHint: 'rclone is required for FTP. Make sure rclone is installed (<code>sudo pacman -S rclone</code> / <code>apt install rclone</code>).',
-    },
-    webdav: {
-      remote: ':webdav,url=http://HOST/dav,user=USER,pass=PASS:',
-      placeholder: ':webdav,url=http://192.168.1.1/nextcloud/dav,user=alice,pass=secret:',
-      tool: 'rclone',
-      remoteHint: 'Replace the URL with your WebDAV endpoint. Nextcloud example: <code>http://192.168.1.1/nextcloud/remote.php/webdav</code>.',
-      protoHint: 'WebDAV is used by Nextcloud, ownCloud, and some NAS web interfaces. Change <code>http://</code> to <code>https://</code> if your server uses SSL.',
-      toolHint: 'rclone is required for WebDAV mounts.',
-    },
-    smb: {
-      remote: ':smb,host=HOST,user=USER,pass=PASS:/share',
-      placeholder: ':smb,host=192.168.1.1,user=miro,pass=secret:/Media',
-      tool: 'rclone',
-      remoteHint: 'Replace <code>HOST</code>, <code>USER</code>, <code>PASS</code>, and <code>/share</code> with your Windows share or Samba details. The share name is the part after <code>\\\\server\\</code> in Windows.',
-      protoHint: 'SMB is the protocol Windows uses for file sharing. Most NAS devices (Synology, QNAP, etc.) also expose shares over SMB.',
-      toolHint: 'rclone is required for SMB mounts.',
-    },
-    rclone: {
-      remote: 'remotename:/path',
-      placeholder: 'mygoogledrive:/Documents',
-      tool: 'rclone',
-      remoteHint: 'Use the name of a remote you have already configured with <code>rclone config</code>, followed by <code>:/path</code>. Run <code>rclone listremotes</code> to see your configured remotes.',
-      protoHint: 'Use this for S3, Google Drive, Dropbox, Backblaze B2, or any other rclone-supported backend that you have already set up with <code>rclone config</code>.',
-      toolHint: 'rclone is required for cloud storage remotes.',
-    },
-    custom: {
-      remote: '',
-      placeholder: '',
-      tool: 'sshfs',
-      remoteHint: 'Enter the remote path in whatever format your chosen mount tool expects.',
-      protoHint: 'Advanced mode — enter the remote path manually.',
-      toolHint: 'Choose sshfs for SSH connections or rclone for everything else.',
-    },
-  };
-  function applyProtocolTemplate() {
-    const proto = document.getElementById('m-protocol').value;
-    const tpl = PROTOCOL_TEMPLATES[proto];
-    if (!tpl) return;
-    const remoteEl = document.getElementById('m-remote');
-    const currentVal = remoteEl.value.trim();
-    const prevTemplates = Object.values(PROTOCOL_TEMPLATES).map(t => t.remote);
-    if (!currentVal || prevTemplates.includes(currentVal)) {
-      remoteEl.value = tpl.remote;
-    }
-    remoteEl.placeholder = tpl.placeholder;
-    document.getElementById('m-mount-tool').value = tpl.tool;
-    document.getElementById('m-proto-hint').innerHTML = tpl.protoHint;
-    document.getElementById('m-remote-hint').innerHTML = tpl.remoteHint;
-    document.getElementById('m-tool-hint').innerHTML = tpl.toolHint;
+  // ---- sync modal ----
+  function onSyncSourceHostChange() {
+    // Path field is always visible — both local and remote paths need input
+    document.getElementById('s-source-path-field').style.display = 'block';
+  }
+  function onSyncTargetHostChange() {
+    document.getElementById('s-target-path-field').style.display = 'block';
   }
 
-  // ---- sync modal ----
-  function openSyncModal(name, source, target, interval, options, syncTool) {
+  function openSyncModal(name, source, target, interval, options, syncTool, sourceHost, sourcePath, targetHost, targetPath, identity) {
     const editing = !!name;
     document.getElementById('sync-modal-title').textContent = editing ? `Edit — ${name}` : 'Add Sync Job';
     document.getElementById('sync-modal-save-btn').textContent = editing ? 'Save Changes' : 'Add Sync Job';
     document.getElementById('s-editing').value = name || '';
     document.getElementById('s-name').value = name || '';
+
+    // Set host/path for source — for local sources, show the source path in the path input
+    document.getElementById('s-source-host').value = sourceHost || '';
+    document.getElementById('s-source-path').value = sourceHost ? (sourcePath || '') : (source || '');
     document.getElementById('s-source').value = source || '';
+
+    // Set host/path for target — same logic
+    document.getElementById('s-target-host').value = targetHost || '';
+    document.getElementById('s-target-path').value = targetHost ? (targetPath || '') : (target || '');
     document.getElementById('s-target').value = target || '';
+
     document.getElementById('s-interval-min').value = interval ? Math.round(interval / 60) : 60;
     document.getElementById('s-interval').value = interval || 3600;
     document.getElementById('s-options').value = options || '-az --delete --stats';
     document.getElementById('s-sync-tool').value = syncTool || 'rsync';
+    document.getElementById('s-identity').value = identity || '';
     document.getElementById('s-enabled').checked = true;
-    const form = document.getElementById('sync-form');
-    if (editing) {
-      form.setAttribute('hx-put', `/api/syncs/${encodeURIComponent(name)}`);
-      form.removeAttribute('hx-post');
-    } else {
-      form.setAttribute('hx-post', '/api/syncs');
-      form.removeAttribute('hx-put');
-    }
-    htmx.process(form);
+
+    document.getElementById('s-editing').value = name || '';
+    onSyncSourceHostChange();
+    onSyncTargetHostChange();
     document.getElementById('sync-overlay').classList.add('open');
     document.getElementById('s-name').focus();
   }
@@ -1021,6 +1051,21 @@
   // Sync interval: minutes UI → seconds hidden field
   document.getElementById('s-interval-min').addEventListener('input', e => {
     document.getElementById('s-interval').value = (+e.target.value || 1) * 60;
+  });
+
+  // ---- form edit redirect: POST→PUT when _editing is set ----
+  document.body.addEventListener('htmx:configRequest', (e) => {
+    const form = e.detail.elt.closest('form');
+    if (!form) return;
+    const editingField = form.querySelector('[id$="-editing"]');
+    if (!editingField || !editingField.value) return;
+    const editName = editingField.value;
+    // Redirect POST to PUT with the original name in the URL
+    if (e.detail.verb === 'post') {
+      e.detail.verb = 'put';
+      // Replace the path: /api/X → /api/X/{editName}
+      e.detail.path = e.detail.path + '/' + encodeURIComponent(editName);
+    }
   });
 
   // ---- log modal ----
@@ -1062,9 +1107,49 @@
     setTheme(saved);
   })();
 
+  // ---- logs tab ----
+  let _logAutoScroll = true;
+  function loadLogs() {
+    fetch('/api/logs?lines=500')
+      .then(r => r.json())
+      .then(d => {
+        const viewer = document.getElementById('log-viewer');
+        const filter = document.getElementById('log-level-filter').value;
+        let lines = d.lines || [];
+        if (filter) {
+          const levels = {ERROR: ['ERROR'], WARNING: ['WARNING','ERROR'], INFO: ['INFO','WARNING','ERROR']};
+          const allowed = levels[filter] || [];
+          lines = lines.filter(l => allowed.some(lv => l.includes(`[${lv}]`)));
+        }
+        viewer.innerHTML = lines.map(l => {
+          let cls = '';
+          if (l.includes('[ERROR]')) cls = 'style="color:var(--danger-fg)"';
+          else if (l.includes('[WARNING]')) cls = 'style="color:var(--b-stale-fg)"';
+          else if (l.includes('[DEBUG]')) cls = 'style="color:var(--dimmed)"';
+          return `<div ${cls}>${l.replace(/</g,'&lt;')}</div>`;
+        }).join('') || '<div style="color:var(--dimmed)">No log entries yet.</div>';
+        if (_logAutoScroll) viewer.scrollTop = viewer.scrollHeight;
+      })
+      .catch(() => {
+        document.getElementById('log-viewer').textContent = 'Failed to load logs.';
+      });
+  }
+  function filterLogs() { loadLogs(); }
+  // Auto-refresh logs every 3s when the Logs tab is active
+  setInterval(() => {
+    if (document.getElementById('tab-logs').classList.contains('active')) loadLogs();
+  }, 3000);
+  // Initial load when tab is opened
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      if (t.textContent.trim() === 'Logs') setTimeout(loadLogs, 50);
+    });
+  });
+
   // ---- keyboard ----
+  function closeBrowserModal() { document.getElementById('browser-overlay').classList.remove('open'); }
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeMountModal(); closeSyncModal(); closeLogModal(); }
+    if (e.key === 'Escape') { closeMountModal(); closeSyncModal(); closeLogModal(); closeHostModal(); closeBrowserModal(); }
   });
 
   // ---- transfer protocol switcher ----
@@ -1129,7 +1214,7 @@
   function openTransferLog(id) {
     const overlay = document.getElementById('log-overlay');
     const title = document.getElementById('log-modal-title');
-    const output = document.getElementById('log-output');
+    const output = document.getElementById('log-content');
     title.textContent = `Transfer ${id} — output`;
     output.textContent = 'Loading…';
     overlay.classList.add('open');
@@ -1138,6 +1223,103 @@
       .then(d => { output.textContent = (d.lines || []).join('\n') || '(no output yet)'; })
       .catch(() => { output.textContent = 'Failed to load output.'; });
   }
+
+  // ---- file browser modal ----
+  let _fileBrowserTarget = null;
+  let _fileBrowserHost = null;
+  let _fileBrowserPath = '/';
+
+  function openFileBrowser(targetInputId, hostName) {
+    _fileBrowserTarget = targetInputId;
+    _fileBrowserHost = hostName;
+    _fileBrowserPath = '/';
+    loadBrowserContents();
+    document.getElementById('browser-overlay').classList.add('open');
+  }
+
+  function loadBrowserContents() {
+    const list = document.getElementById('browser-list');
+    list.innerHTML = '<div style="padding:1rem;color:var(--muted)">Loading…</div>';
+
+    const endpoint = _fileBrowserHost
+      ? `/api/hosts/${encodeURIComponent(_fileBrowserHost)}/browse?path=${encodeURIComponent(_fileBrowserPath)}`
+      : `/api/browse?path=${encodeURIComponent(_fileBrowserPath)}`;
+
+    fetch(endpoint)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('browser-path').textContent = d.path;
+        list.innerHTML = '';
+        if (_fileBrowserPath !== '/') {
+          const parentBtn = document.createElement('div');
+          parentBtn.textContent = '📁 ../';
+          parentBtn.style.padding = '0.5rem';
+          parentBtn.style.cursor = 'pointer';
+          parentBtn.style.borderBottom = '1px solid var(--border)';
+          parentBtn.onclick = () => {
+            _fileBrowserPath = _fileBrowserPath.split('/').slice(0, -2).join('/') || '/';
+            loadBrowserContents();
+          };
+          list.appendChild(parentBtn);
+        }
+        (d.entries || []).forEach(e => {
+          const div = document.createElement('div');
+          div.textContent = (e.type === 'dir' ? '📁 ' : '📄 ') + e.name;
+          div.style.padding = '0.5rem';
+          div.style.cursor = 'pointer';
+          div.style.borderBottom = '1px solid var(--border)';
+          if (e.type === 'dir') {
+            div.onclick = () => {
+              _fileBrowserPath = (_fileBrowserPath === '/' ? '' : _fileBrowserPath) + '/' + e.name;
+              loadBrowserContents();
+            };
+          } else {
+            div.onclick = () => {
+              const path = (_fileBrowserPath === '/' ? '' : _fileBrowserPath) + '/' + e.name;
+              document.getElementById(_fileBrowserTarget).value = path;
+              closeBrowserModal();
+            };
+          }
+          list.appendChild(div);
+        });
+      })
+      .catch(e => {
+        list.innerHTML = '<div style="padding:1rem;color:var(--danger-fg)">Error loading directory</div>';
+      });
+  }
+
+  function selectBrowserPath() {
+    if (_fileBrowserTarget) {
+      document.getElementById(_fileBrowserTarget).value = _fileBrowserPath;
+      document.getElementById('browser-overlay').classList.remove('open');
+    }
+  }
+
+  // Assembly of remote strings from host + path on form submit
+  document.getElementById('mount-form')?.addEventListener('submit', (e) => {
+    const hostName = document.getElementById('m-host')?.value;
+    const path = document.getElementById('m-path')?.value;
+    const manual = document.getElementById('m-remote-manual')?.value;
+    document.getElementById('m-remote').value = hostName ? `resolve:${hostName}:${path}` : manual;
+  });
+
+  document.getElementById('sync-form')?.addEventListener('submit', (e) => {
+    const srcHost = document.getElementById('s-source-host')?.value;
+    const srcPath = document.getElementById('s-source-path')?.value;
+    const tgtHost = document.getElementById('s-target-host')?.value;
+    const tgtPath = document.getElementById('s-target-path')?.value;
+    document.getElementById('s-source').value = srcHost ? `resolve:${srcHost}:${srcPath}` : srcPath;
+    document.getElementById('s-target').value = tgtHost ? `resolve:${tgtHost}:${tgtPath}` : tgtPath;
+  });
+
+  document.getElementById('transfer-form')?.addEventListener('submit', (e) => {
+    const srcHost = document.getElementById('tr-source-host')?.value;
+    const srcPath = document.getElementById('tr-source-path')?.value;
+    const dstHost = document.getElementById('tr-dest-host')?.value;
+    const dstPath = document.getElementById('tr-dest-path')?.value;
+    document.getElementById('tr-source').value = srcHost ? `resolve:${srcHost}:${srcPath}` : srcPath;
+    document.getElementById('tr-dest').value = dstHost ? `resolve:${dstHost}:${dstPath}` : dstPath;
+  });
 </script>
 </body>
 </html>

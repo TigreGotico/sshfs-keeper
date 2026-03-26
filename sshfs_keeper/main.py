@@ -21,6 +21,31 @@ from sshfs_keeper import api as api_module
 _PID_FILE = CONFIG_DIR / "daemon.pid"
 
 
+_MAX_LOG_LINES = 500
+"""Maximum number of log lines kept in the in-memory ring buffer."""
+
+_log_buffer: list[str] = []
+"""In-memory ring buffer of recent log lines, available via ``GET /api/logs``."""
+
+
+class _RingBufferHandler(logging.Handler):
+    """Logging handler that appends formatted records to :data:`_log_buffer`."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            line = self.format(record)
+            _log_buffer.append(line)
+            if len(_log_buffer) > _MAX_LOG_LINES:
+                del _log_buffer[: len(_log_buffer) - _MAX_LOG_LINES]
+        except Exception:
+            self.handleError(record)
+
+
+def get_log_buffer() -> list[str]:
+    """Return a copy of the in-memory log buffer (oldest first)."""
+    return list(_log_buffer)
+
+
 def _setup_logging(
     level: str,
     log_file: Optional[str] = None,
@@ -63,6 +88,8 @@ def _setup_logging(
                 log_file, maxBytes=5 * 1024 * 1024, backupCount=3
             )
         )
+    # In-memory ring buffer — always active, powers the Logs tab in the dashboard
+    handlers.append(_RingBufferHandler())
     for h in handlers:
         h.setFormatter(formatter)
 
@@ -104,7 +131,8 @@ async def _run(config: AppConfig) -> None:
     monitor = Monitor(config)
     sync_states = {s.name: SyncState(config=s) for s in config.syncs}
     sync_manager = SyncManager(sync_states, daemon_cfg=config.daemon)
-    transfer_manager = TransferManager()
+    from sshfs_keeper.config import CONFIG_DIR
+    transfer_manager = TransferManager(persist_path=CONFIG_DIR / "transfers.json")
     api_module.setup(monitor, config, sync_manager, transfer_manager)
 
     await monitor.start()

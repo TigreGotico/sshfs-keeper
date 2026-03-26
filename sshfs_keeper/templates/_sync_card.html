@@ -39,7 +39,7 @@
       hx-swap="innerHTML"
       hx-on::after-request="document.getElementById('log-overlay').classList.add('open');document.getElementById('log-modal-title').textContent='Sync log — {{ s.name }}'">📋 Log</button>
     <button class="btn btn-edit"
-      onclick="openSyncModal('{{ s.name }}','{{ s.source }}','{{ s.target }}',{{ s.interval }},'{{ s.options }}','{{ s.sync_tool }}',{{ s.targets|tojson|safe }},'{{ s.identity or '' }}')">✎ Edit</button>
+      onclick="openSyncModal('{{ s.name }}','{{ s.source }}','{{ s.target }}',{{ s.interval }},'{{ s.options }}','{{ s.sync_tool }}','{{ s.source_host }}','{{ s.source_path }}','{{ s.target_host }}','{{ s.target_path }}','{{ s.identity or '' }}')">✎ Edit</button>
     {% if s.enabled %}
     <button class="btn btn-disable"
       hx-post="/api/syncs/{{ s.name | urlencode }}/disable"

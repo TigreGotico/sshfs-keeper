@@ -1,16 +1,18 @@
 """One-shot file/directory transfers via rsync-over-SSH, SCP, rclone, or local rsync."""
 
 import asyncio
+import json
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 log = logging.getLogger(__name__)
 
-_MAX_HISTORY = 20
+_MAX_HISTORY = 50
 _MAX_OUTPUT_LINES = 200
 
 
@@ -20,6 +22,7 @@ class TransferStatus(str, Enum):
     DONE = "done"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass
@@ -84,13 +87,13 @@ def _build_cmd(req: TransferRequest) -> list[str]:
     extra = req.options.split() if req.options.strip() else []
 
     if req.protocol == "local":
-        cmd = ["rsync", "-az", "--progress", "-v"]
+        cmd = ["rsync", "-az", "--partial", "--progress", "-v"]
         if req.move:
             cmd.append("--remove-source-files")
         return cmd + extra + [req.source, req.dest]
 
     if req.protocol == "rsync_ssh":
-        cmd = ["rsync", "-az", "--progress", "-v"]
+        cmd = ["rsync", "-az", "--partial", "--progress", "-v"]
         if req.move:
             cmd.append("--remove-source-files")
         ssh = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
@@ -118,14 +121,94 @@ def _build_cmd(req: TransferRequest) -> list[str]:
 class TransferManager:
     """Manages a bounded history of one-shot file transfers.
 
-    At most ``_MAX_HISTORY`` transfers are retained in memory; the oldest
-    entry is evicted when the limit is exceeded.  No state is persisted to
-    disk — history is lost on daemon restart.
+    At most ``_MAX_HISTORY`` transfers are retained in memory.  State is
+    persisted to ``transfers.json`` in the config directory so that
+    interrupted transfers can be resumed after a daemon restart.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: Optional[Path] = None) -> None:
         self._transfers: dict[str, TransferState] = {}
         self._history: list[str] = []  # newest-first list of IDs
+        self._persist_path = persist_path
+        if persist_path:
+            self._load_from_disk()
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _save_to_disk(self) -> None:
+        """Persist transfer history to JSON."""
+        if not self._persist_path:
+            return
+        records = []
+        for tid in self._history:
+            t = self._transfers.get(tid)
+            if t is None:
+                continue
+            records.append({
+                "id": t.id,
+                "request": {
+                    "protocol": t.request.protocol,
+                    "source": t.request.source,
+                    "dest": t.request.dest,
+                    "move": t.request.move,
+                    "identity": t.request.identity,
+                    "options": t.request.options,
+                },
+                "status": t.status.value,
+                "started_at": t.started_at,
+                "ended_at": t.ended_at,
+                "error": t.error,
+                "last_progress": t.last_progress,
+            })
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            self._persist_path.write_text(json.dumps(records, indent=2))
+        except Exception as exc:
+            log.warning("Failed to persist transfers: %s", exc)
+
+    def _load_from_disk(self) -> None:
+        """Load transfer history from JSON, marking in-progress ones as interrupted."""
+        if not self._persist_path or not self._persist_path.exists():
+            return
+        try:
+            records = json.loads(self._persist_path.read_text())
+        except Exception as exc:
+            log.warning("Failed to load transfers: %s", exc)
+            return
+        for rec in records:
+            req = TransferRequest(
+                protocol=rec["request"]["protocol"],
+                source=rec["request"]["source"],
+                dest=rec["request"]["dest"],
+                move=rec["request"].get("move", False),
+                identity=rec["request"].get("identity"),
+                options=rec["request"].get("options", ""),
+            )
+            status_str = rec.get("status", "failed")
+            # Mark previously running/pending transfers as interrupted
+            if status_str in ("running", "pending"):
+                status = TransferStatus.INTERRUPTED
+            else:
+                status = TransferStatus(status_str)
+            state = TransferState(
+                id=rec["id"],
+                request=req,
+                status=status,
+                started_at=rec.get("started_at"),
+                ended_at=rec.get("ended_at") or (time.time() if status == TransferStatus.INTERRUPTED else None),
+                error=rec.get("error") or ("Daemon restarted while transfer was in progress" if status == TransferStatus.INTERRUPTED else None),
+                last_progress=rec.get("last_progress", ""),
+            )
+            self._transfers[state.id] = state
+            self._history.append(state.id)
+        if self._history:
+            log.info(
+                "Loaded %d transfer(s) from disk (%d interrupted)",
+                len(self._history),
+                sum(1 for t in self._transfers.values() if t.status == TransferStatus.INTERRUPTED),
+            )
 
     # ------------------------------------------------------------------
 
@@ -186,8 +269,39 @@ class TransferManager:
             old = self._history.pop()
             self._transfers.pop(old, None)
 
+        self._save_to_disk()
         asyncio.create_task(self._run(state), name=f"transfer-{tid}")
         return tid
+
+    async def resume(self, tid: str) -> bool:
+        """Resume an interrupted transfer.
+
+        Re-runs the same command (rsync ``--partial`` handles resuming).
+
+        Args:
+            tid: Transfer ID.
+
+        Returns:
+            ``True`` if the transfer was found and resumed.
+        """
+        state = self._transfers.get(tid)
+        if state is None or state.status not in (
+            TransferStatus.INTERRUPTED, TransferStatus.FAILED, TransferStatus.CANCELLED,
+        ):
+            return False
+        state.status = TransferStatus.PENDING
+        state.started_at = None
+        state.ended_at = None
+        state.error = None
+        state.output.clear()
+        state.last_progress = ""
+        # Move to front of history
+        if tid in self._history:
+            self._history.remove(tid)
+        self._history.insert(0, tid)
+        self._save_to_disk()
+        asyncio.create_task(self._run(state), name=f"transfer-{tid}")
+        return True
 
     async def cancel(self, tid: str) -> bool:
         """Cancel a pending or running transfer.
@@ -211,6 +325,7 @@ class TransferManager:
             state._proc.terminate()
         state.status = TransferStatus.CANCELLED
         state.ended_at = time.time()
+        self._save_to_disk()
         return True
 
     # ------------------------------------------------------------------
@@ -337,3 +452,4 @@ class TransferManager:
         finally:
             if state.ended_at is None:
                 state.ended_at = time.time()
+            self._save_to_disk()

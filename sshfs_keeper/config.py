@@ -323,6 +323,9 @@ class AppConfig:
         mounts = [MountConfig(**m) for m in raw.get("mount", [])]
         syncs = [SyncConfig(**s) for s in raw.get("sync", [])]
 
+        # Auto-migrate old format (free-text remote) to structured hosts
+        hosts, mounts, syncs = cls._migrate_to_hosts(hosts, mounts, syncs)
+
         # Auto-restore from backup if config was wiped but backup has mounts
         if not mounts:
             bak_path = path.with_suffix(".toml.bak")
@@ -340,9 +343,123 @@ class AppConfig:
                         _shutil.copy2(bak_path, path)
                         mounts = bak_mounts
                         hosts = [HostConfig(**h) for h in bak_raw.get("host", [])]
+                        hosts, mounts, syncs = cls._migrate_to_hosts(hosts, mounts, syncs)
                 except Exception as e:
                     log.error("Failed to restore from backup: %s", e)
 
         obj = cls(daemon=daemon, api=api, notifications=notifications, hosts=hosts, mounts=mounts, syncs=syncs)
         obj._path = path
         return obj
+
+    @classmethod
+    def _migrate_to_hosts(
+        cls,
+        hosts: list[HostConfig],
+        mounts: list[MountConfig],
+        syncs: list[SyncConfig],
+    ) -> tuple[list[HostConfig], list[MountConfig], list[SyncConfig]]:
+        """Migrate old free-text remote format to structured host references.
+
+        For any mount/sync that has a free-text remote/source/target but no host_name,
+        parse the remote string, create or reuse a HostConfig, and update the mount/sync
+        to reference it. This allows old configs to transparently upgrade.
+
+        Returns: (updated_hosts, updated_mounts, updated_syncs)
+        """
+        host_map: dict[str, HostConfig] = {h.name: h for h in hosts}
+        migrated_mounts: list[MountConfig] = []
+        migrated_syncs: list[SyncConfig] = []
+
+        # Migrate mounts
+        for m in mounts:
+            if not m.host_name and m.remote:
+                # Parse remote string: user@host:/path or /path
+                host_name, path = cls._parse_remote(m.remote)
+                if host_name:
+                    # Extract user and hostname
+                    if "@" in host_name:
+                        user, hostname = host_name.rsplit("@", 1)
+                    else:
+                        user = "root"
+                        hostname = host_name
+                    # Create or reuse host
+                    host_key = f"{user}@{hostname}"
+                    if host_key not in host_map:
+                        new_host = HostConfig(
+                            name=hostname,  # use hostname as the host name
+                            hostname=hostname,
+                            user=user,
+                            identity=m.identity,  # inherit mount's identity if set
+                        )
+                        host_map[host_key] = new_host
+                        log.info("Auto-migrated mount '%s': created host '%s'", m.name, host_key)
+                    # Update mount to reference the host
+                    m.host_name = host_map[host_key].name
+                    m.path = path
+            migrated_mounts.append(m)
+
+        # Migrate syncs
+        for s in syncs:
+            migrated = False
+            # Migrate source
+            if not s.source_host and s.source:
+                host_name, path = cls._parse_remote(s.source)
+                if host_name:
+                    if "@" in host_name:
+                        user, hostname = host_name.rsplit("@", 1)
+                    else:
+                        user = "root"
+                        hostname = host_name
+                    host_key = f"{user}@{hostname}"
+                    if host_key not in host_map:
+                        new_host = HostConfig(
+                            name=hostname,
+                            hostname=hostname,
+                            user=user,
+                            identity=s.identity,
+                        )
+                        host_map[host_key] = new_host
+                        log.info("Auto-migrated sync '%s' source: created host '%s'", s.name, host_key)
+                    s.source_host = host_map[host_key].name
+                    s.source_path = path
+                    migrated = True
+            # Migrate target
+            if not s.target_host and s.target:
+                host_name, path = cls._parse_remote(s.target)
+                if host_name:
+                    if "@" in host_name:
+                        user, hostname = host_name.rsplit("@", 1)
+                    else:
+                        user = "root"
+                        hostname = host_name
+                    host_key = f"{user}@{hostname}"
+                    if host_key not in host_map:
+                        new_host = HostConfig(
+                            name=hostname,
+                            hostname=hostname,
+                            user=user,
+                            identity=s.identity,
+                        )
+                        host_map[host_key] = new_host
+                        log.info("Auto-migrated sync '%s' target: created host '%s'", s.name, host_key)
+                    s.target_host = host_map[host_key].name
+                    s.target_path = path
+                    migrated = True
+            migrated_syncs.append(s)
+
+        return list(host_map.values()), migrated_mounts, migrated_syncs
+
+    @staticmethod
+    def _parse_remote(remote: str) -> tuple[Optional[str], str]:
+        """Parse a remote string into (host_part, path).
+
+        Examples:
+            "user@host:/media/data" -> ("user@host", "/media/data")
+            "/local/path" -> (None, "/local/path")
+            "user@host:relative/path" -> ("user@host", "relative/path")
+        """
+        if ":" in remote:
+            parts = remote.split(":", 1)
+            return parts[0] if parts[0] else None, parts[1]
+        # Local path (no colon)
+        return None, remote

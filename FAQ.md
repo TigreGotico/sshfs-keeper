@@ -43,6 +43,65 @@ identity_passphrase = "my passphrase"
 
 Note: This stores the passphrase in plaintext in config.toml — use file permissions (600) to restrict access.
 
+## How do I define remote hosts explicitly?
+
+Instead of embedding `user@host` in every mount/sync, define hosts once in the `[host]` section and reference them by name:
+
+```toml
+[[host]]
+name = "nas"
+hostname = "192.168.1.10"
+user = "miro"
+port = 22
+identity = "/home/miro/.config/sshfs-keeper/keys/nas_rsa"
+
+[[mount]]
+name = "photos"
+host_name = "nas"      # references the host above
+path = "/media/photos"
+local = "/mnt/photos"
+```
+
+**Benefits:**
+- Single source of truth for each host (hostname, user, port, identity)
+- Web UI shows a host dropdown + path picker instead of free-text `user@host:/path` input
+- File browser: click "Browse" next to path input to navigate remote directories
+- Share hosts across multiple mounts/syncs without retyping credentials
+
+The web UI **Hosts** tab lets you add, edit, and delete hosts. Mounts and syncs can only reference a host if they explicitly set `host_name`.
+
+## What happens to my old config when I upgrade?
+
+**Automatic migration**: When the daemon loads an old-format config (with embedded `user@host:/path` strings and no explicit hosts), it:
+1. Parses each `remote`/`source`/`target` string to extract `user@hostname`
+2. Creates a `HostConfig` entry for each unique host
+3. Updates mounts/syncs to set `host_name` and `path` fields
+4. Saves the migrated config back to disk on next write
+
+**No manual action needed** — your old config.toml continues to work. The first time you edit a mount or add a new one via the web UI, the new host-based format is written to disk. Old configs that haven't been edited still load and work fine with the free-text `remote` string.
+
+**Example**:
+```toml
+# Old config (still works, auto-migrates on load)
+[[mount]]
+name = "nas"
+remote = "miro@nas:/media"
+local = "/mnt/nas"
+
+# After daemon restart (or web UI edit), config.toml becomes:
+[[host]]
+name = "nas"
+hostname = "nas"
+user = "miro"
+
+[[mount]]
+name = "nas"
+host_name = "nas"
+path = "/media"
+remote = "miro@nas:/media"  # preserved for reference
+local = "/mnt/nas"
+```
+
 ## How do I reload config without restarting?
 
 ```bash

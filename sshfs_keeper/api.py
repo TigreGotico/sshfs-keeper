@@ -11,7 +11,7 @@ from typing import Any, AsyncGenerator, Optional
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from sshfs_keeper import metrics as _metrics_module
 from sshfs_keeper.config import AppConfig, CONFIG_DIR, HostConfig, MountConfig, SyncConfig, KEYS_DIR
@@ -217,6 +217,14 @@ class TransferPayload(BaseModel):
     source_path: str = ""
     dest_host: str = ""
     dest_path: str = ""
+
+    @field_validator("move", mode="before")
+    @classmethod
+    def _coerce_move(cls, v: object) -> bool:
+        """Accept string booleans from HTML forms (json-enc sends ``'false'``)."""
+        if isinstance(v, str):
+            return v.lower() not in ("false", "0", "")
+        return bool(v)
 
 
 # ------------------------------------------------------------------
@@ -721,13 +729,33 @@ async def api_add_host(payload: HostPayload, request: Request) -> dict:  # type:
 
 @app.put("/api/hosts/{name}")
 async def api_update_host(name: str, payload: HostPayload, request: Request) -> dict:  # type: ignore[type-arg]
-    """Update a host configuration."""
+    """Update a host configuration.
+
+    If ``payload.name`` differs from the URL *name*, the host is renamed and
+    all mount/sync references to the old name are updated automatically.
+    """
     _check_api_key(request)
     config = _get_config()
 
     host = next((h for h in config.hosts if h.name == name), None)
     if host is None:
         raise HTTPException(status_code=404, detail=f"Host '{name}' not found")
+
+    new_name = payload.name
+    if new_name != name:
+        # Check that the new name doesn't collide with another host
+        if any(h.name == new_name for h in config.hosts if h is not host):
+            raise HTTPException(status_code=409, detail=f"Host '{new_name}' already exists")
+        # Cascade rename to all mounts and syncs that reference the old name
+        for m in config.mounts:
+            if m.host_name == name:
+                m.host_name = new_name
+        for s in config.syncs:
+            if s.source_host == name:
+                s.source_host = new_name
+            if s.target_host == name:
+                s.target_host = new_name
+        host.name = new_name
 
     host.hostname = payload.hostname
     host.user = payload.user
@@ -1091,3 +1119,34 @@ async def api_cancel_transfer(tid: str, request: Request) -> JSONResponse:
     if not ok:
         raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found or already finished")
     return _htmx_json({"id": tid, "cancelled": True}, toast=f"Transfer {tid} cancelled")
+
+
+@app.post("/api/transfers/{tid}/resume")
+async def api_resume_transfer(tid: str, request: Request) -> JSONResponse:
+    """Resume an interrupted transfer.
+
+    Args:
+        tid: Transfer ID.
+    """
+    _check_api_key(request)
+    tm = _get_transfer_manager()
+    ok = await tm.resume(tid)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Transfer '{tid}' not found or not interrupted")
+    return _htmx_json({"id": tid, "resumed": True}, toast=f"Transfer {tid} resumed")
+
+
+# ------------------------------------------------------------------
+# Logs
+# ------------------------------------------------------------------
+
+@app.get("/api/logs")
+async def api_logs(lines: int = 200) -> dict:  # type: ignore[type-arg]
+    """Return recent daemon log lines from the in-memory ring buffer.
+
+    Args:
+        lines: Maximum number of lines to return (most recent).
+    """
+    from sshfs_keeper.main import get_log_buffer
+    buf = get_log_buffer()
+    return {"lines": buf[-lines:] if lines < len(buf) else buf}

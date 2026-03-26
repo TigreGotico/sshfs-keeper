@@ -41,7 +41,7 @@
       hx-on::after-request="htmx.trigger('#mounts-grid','refresh')"
       title="Force-unmount this mount point">⏏ Unmount</button>
     <button class="btn btn-edit"
-      onclick="openMountModal('{{ m.name }}','{{ m.remote }}','{{ m.local }}','{{ m.mount_tool }}')">✎ Edit</button>
+      onclick="openMountModal('{{ m.name }}','{{ m.remote }}','{{ m.local }}','{{ m.mount_tool }}','{{ m.host_name }}','{{ m.path }}','{{ m.identity or '' }}')">✎ Edit</button>
     <button class="btn btn-tool"
       hx-patch="/api/mounts/{{ m.name | urlencode }}/backend"
       hx-swap="none"

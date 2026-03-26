@@ -217,3 +217,196 @@ def test_validate_empty_sync_source():
     cfg = AppConfig(syncs=[SyncConfig(name="j", source="", target="/b")])
     errors = cfg.validate()
     assert any("source is required" in e for e in errors)
+
+
+# ------------------------------------------------------------------
+# Config Migration (old format → structured hosts)
+# ------------------------------------------------------------------
+
+def test_migrate_mount_old_format_to_host():
+    """Old-format mounts (free-text remote) auto-migrate to host references."""
+    from sshfs_keeper.config import AppConfig, MountConfig
+
+    # Simulate old-format mount (no host_name/path)
+    old_mounts = [
+        MountConfig(name="media", remote="miro@nas:/media/photos", local="/mnt/photos"),
+    ]
+    cfg = AppConfig._migrate_to_hosts([], old_mounts, [])
+    hosts, mounts, _ = cfg
+
+    # Should create a host for nas
+    assert len(hosts) == 1
+    assert hosts[0].name == "nas"
+    assert hosts[0].hostname == "nas"
+    assert hosts[0].user == "miro"
+
+    # Mount should now reference the host
+    assert mounts[0].host_name == "nas"
+    assert mounts[0].path == "/media/photos"
+    assert mounts[0].remote == "miro@nas:/media/photos"  # preserved
+
+
+def test_migrate_sync_old_format_to_host():
+    """Old-format syncs (free-text source/target) auto-migrate to host references."""
+    from sshfs_keeper.config import AppConfig, SyncConfig
+
+    old_syncs = [
+        SyncConfig(
+            name="backup",
+            source="/local/data",
+            target="admin@backup-server:/backups/data",
+        ),
+    ]
+    hosts, _, syncs = AppConfig._migrate_to_hosts([], [], old_syncs)
+
+    # Should create a host for backup-server
+    assert len(hosts) == 1
+    assert hosts[0].name == "backup-server"
+    assert hosts[0].hostname == "backup-server"
+    assert hosts[0].user == "admin"
+
+    # Sync should now reference the host
+    assert syncs[0].target_host == "backup-server"
+    assert syncs[0].target_path == "/backups/data"
+    assert syncs[0].target == "admin@backup-server:/backups/data"  # preserved
+
+
+def test_migrate_reuses_existing_host():
+    """Multiple mounts referencing same user@host reuse a single HostConfig."""
+    from sshfs_keeper.config import AppConfig, MountConfig, HostConfig
+
+    # Two mounts pointing to same host
+    old_mounts = [
+        MountConfig(name="photos", remote="miro@nas:/media/photos", local="/mnt/photos"),
+        MountConfig(name="music", remote="miro@nas:/media/music", local="/mnt/music"),
+    ]
+    hosts, mounts, _ = AppConfig._migrate_to_hosts([], old_mounts, [])
+
+    # Should create only one host
+    assert len(hosts) == 1
+    assert hosts[0].name == "nas"
+
+    # Both mounts reference the same host
+    assert mounts[0].host_name == "nas"
+    assert mounts[1].host_name == "nas"
+    assert mounts[0].path == "/media/photos"
+    assert mounts[1].path == "/media/music"
+
+
+def test_migrate_skips_already_structured():
+    """Mounts with host_name already set are not re-migrated."""
+    from sshfs_keeper.config import AppConfig, MountConfig, HostConfig
+
+    # Pre-existing host
+    host = HostConfig(name="nas", hostname="192.168.1.10", user="miro")
+
+    # Mount already using host reference
+    mount = MountConfig(
+        name="photos",
+        remote="miro@192.168.1.10:/media/photos",
+        local="/mnt/photos",
+        host_name="nas",
+        path="/media/photos",
+    )
+
+    hosts, mounts, _ = AppConfig._migrate_to_hosts([host], [mount], [])
+
+    # No new hosts created
+    assert len(hosts) == 1
+    assert hosts[0] == host
+
+    # Mount fields unchanged
+    assert mounts[0].host_name == "nas"
+    assert mounts[0].path == "/media/photos"
+
+
+def test_migrate_local_paths_unchanged():
+    """Local-only paths (no user@host) are left unchanged."""
+    from sshfs_keeper.config import AppConfig, SyncConfig
+
+    sync = SyncConfig(
+        name="local_backup",
+        source="/home/user/data",
+        target="/backup/data",
+    )
+    hosts, _, syncs = AppConfig._migrate_to_hosts([], [], [sync])
+
+    # No hosts created
+    assert len(hosts) == 0
+
+    # Sync unchanged
+    assert syncs[0].source_host == ""
+    assert syncs[0].target_host == ""
+    assert syncs[0].source == "/home/user/data"
+    assert syncs[0].target == "/backup/data"
+
+
+def test_migrate_load_old_config_file():
+    """End-to-end: loading a pre-migration config auto-creates hosts and references."""
+    # Simulate an old config file (before host entities existed)
+    OLD_CONFIG_TOML = """
+[daemon]
+check_interval = 30
+
+[[mount]]
+name = "photos"
+remote = "miro@nas:/media/photos"
+local = "/mnt/photos"
+enabled = true
+
+[[mount]]
+name = "music"
+remote = "miro@nas:/media/music"
+local = "/mnt/music"
+identity = "/home/miro/.ssh/nas_key"
+
+[[sync]]
+name = "backup"
+source = "/home/user/documents"
+target = "backup@server:/backups/docs"
+interval = 3600
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".toml", mode="w", delete=False) as fh:
+        fh.write(OLD_CONFIG_TOML)
+        path = Path(fh.name)
+
+    try:
+        cfg = AppConfig.load(path)
+
+        # Should have created 2 hosts
+        assert len(cfg.hosts) == 2
+        host_names = {h.name for h in cfg.hosts}
+        assert "nas" in host_names
+        assert "server" in host_names
+
+        # Find hosts
+        nas_host = next(h for h in cfg.hosts if h.name == "nas")
+        server_host = next(h for h in cfg.hosts if h.name == "server")
+
+        assert nas_host.hostname == "nas"
+        assert nas_host.user == "miro"
+        assert server_host.hostname == "server"
+        assert server_host.user == "backup"
+
+        # Mounts should reference the hosts
+        assert cfg.mounts[0].name == "photos"
+        assert cfg.mounts[0].host_name == "nas"
+        assert cfg.mounts[0].path == "/media/photos"
+        assert cfg.mounts[0].remote == "miro@nas:/media/photos"  # preserved
+
+        assert cfg.mounts[1].name == "music"
+        assert cfg.mounts[1].host_name == "nas"
+        assert cfg.mounts[1].path == "/media/music"
+        assert cfg.mounts[1].identity == "/home/miro/.ssh/nas_key"
+
+        # Sync should reference the target host
+        assert cfg.syncs[0].name == "backup"
+        assert cfg.syncs[0].source == "/home/user/documents"
+        assert cfg.syncs[0].target == "backup@server:/backups/docs"
+        assert cfg.syncs[0].target_host == "server"
+        assert cfg.syncs[0].target_path == "/backups/docs"
+        assert cfg.syncs[0].source_host == ""  # local path, no host
+
+    finally:
+        path.unlink()
