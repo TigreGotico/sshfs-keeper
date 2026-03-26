@@ -634,8 +634,11 @@
         <input type="checkbox" id="s-enabled" name="enabled" checked>
         <label for="s-enabled">Enable this sync job immediately</label>
       </div>
+      <div id="s-test-error" style="display:none;background:#7f1d1d;color:#fecaca;padding:0.75rem;border-radius:4px;font-size:0.875rem;margin-top:1rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto"></div>
+      <div id="s-test-success" style="display:none;background:#065f46;color:#bbf7d0;padding:0.75rem;border-radius:4px;font-size:0.875rem;margin-top:1rem">✔ Sync test passed — configuration is valid</div>
       <div class="modal-footer" style="margin-top:0">
         <button type="button" class="btn btn-muted" onclick="closeSyncModal()">Cancel</button>
+        <button type="button" class="btn btn-secondary" onclick="testSyncConfig()" id="sync-test-btn">🧪 Test</button>
         <button type="submit" class="btn btn-primary" id="sync-modal-save-btn">Add Sync Job</button>
       </div>
     </form>
@@ -831,7 +834,59 @@
     div.innerHTML = `<input type="text" name="targets" placeholder="user@server:/path/" style="flex:1"><button type="button" onclick="this.parentElement.remove()" class="btn btn-small" style="color:#dc2626">✕ Remove</button>`;
     targetsList.appendChild(div);
   }
-  function closeSyncModal() { document.getElementById('sync-overlay').classList.remove('open'); }
+  function closeSyncModal() {
+    document.getElementById('sync-overlay').classList.remove('open');
+    document.getElementById('s-test-error').style.display = 'none';
+    document.getElementById('s-test-success').style.display = 'none';
+  }
+
+  async function testSyncConfig() {
+    const errorDiv = document.getElementById('s-test-error');
+    const successDiv = document.getElementById('s-test-success');
+    errorDiv.style.display = 'none';
+    successDiv.style.display = 'none';
+
+    const btn = document.getElementById('sync-test-btn');
+    const origText = btn.textContent;
+    btn.textContent = '⏳ Testing...';
+    btn.disabled = true;
+
+    try {
+      // Collect form data
+      const targets = Array.from(document.querySelectorAll('input[name="targets"]')).map(el => el.value).filter(v => v.trim());
+      const payload = {
+        name: document.getElementById('s-name').value,
+        source: document.getElementById('s-source').value,
+        target: document.getElementById('s-target').value,
+        interval: parseInt(document.getElementById('s-interval').value),
+        options: document.getElementById('s-options').value,
+        identity: document.getElementById('s-identity').value || null,
+        enabled: document.getElementById('s-enabled').checked,
+        sync_tool: document.getElementById('s-sync-tool').value,
+        targets: targets,
+      };
+
+      const resp = await fetch('/api/syncs/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+
+      if (data.success) {
+        successDiv.style.display = 'block';
+      } else {
+        errorDiv.textContent = data.error || 'Unknown error';
+        errorDiv.style.display = 'block';
+      }
+    } catch (e) {
+      errorDiv.textContent = `Error: ${e.message}`;
+      errorDiv.style.display = 'block';
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
 
   // Sync interval: minutes UI → seconds hidden field
   document.getElementById('s-interval-min').addEventListener('input', e => {

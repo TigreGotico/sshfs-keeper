@@ -700,6 +700,76 @@ async def api_update_sync(name: str, payload: SyncPayload, request: Request) -> 
     return _htmx_json({"name": sc.name, "updated": True}, toast=f"{sc.name} updated ✔")
 
 
+@app.post("/api/syncs/test")
+async def api_test_sync(payload: SyncPayload, request: Request) -> dict:  # type: ignore[type-arg]
+    """Test a sync configuration without saving it.
+
+    Runs a dry-run rsync/rclone command with --dry-run flag to verify
+    the source and destination are accessible and the command is valid.
+    """
+    _check_api_key(request)
+    try:
+        from sshfs_keeper.sync import _build_rsync_cmd, _build_rclone_sync_cmd
+
+        test_config = SyncConfig(
+            name=payload.name,
+            source=payload.source,
+            target=payload.target,
+            interval=payload.interval,
+            options=payload.options,
+            identity=payload.identity,
+            enabled=payload.enabled,
+            sync_tool=payload.sync_tool,
+            targets=payload.targets or [],
+        )
+
+        # Build the test command with --dry-run
+        if test_config.sync_tool == "rclone":
+            cmd = _build_rclone_sync_cmd(test_config)
+            cmd.insert(1, "--dry-run")  # rclone: rclone sync --dry-run src dst
+        else:
+            cmd = _build_rsync_cmd(test_config)
+            cmd.append("--dry-run")  # rsync: rsync ... --dry-run
+
+        # Run the test command with a short timeout
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=10)
+        except asyncio.TimeoutError:
+            return _htmx_json(
+                {"success": False, "error": "Test sync timed out after 10 seconds"},
+                toast="Sync test failed: timeout",
+                ok=False,
+            )
+
+        if proc.returncode in {0, 23, 24}:  # 0=success, 23/24=non-fatal rsync errors
+            output = stdout_data.decode(errors="replace") + stderr_data.decode(errors="replace")
+            return _htmx_json(
+                {"success": True, "output": output[:500]},  # First 500 chars
+                toast=f"Sync test passed ✔",
+                ok=True,
+            )
+        else:
+            error_msg = stderr_data.decode(errors="replace") or f"exit code {proc.returncode}"
+            return _htmx_json(
+                {"success": False, "error": error_msg[:500]},
+                toast="Sync test failed",
+                ok=False,
+            )
+    except Exception as e:
+        import traceback
+        error = f"{type(e).__name__}: {str(e)}"
+        return _htmx_json(
+            {"success": False, "error": error},
+            toast="Sync test error",
+            ok=False,
+        )
+
+
 @app.delete("/api/syncs/{name}")
 async def api_delete_sync(name: str, request: Request) -> JSONResponse:
     """Delete a sync job config and return HX-Trigger toast header."""
