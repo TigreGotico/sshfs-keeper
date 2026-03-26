@@ -1,5 +1,17 @@
 # Maintenance Report
 
+## 2026-03-26 — Sync test feature and error display
+
+**AI Model**: claude-haiku-4-5
+**Actions Taken**:
+- **Added /api/syncs/test endpoint**: Tests sync configurations with dry-run rsync/rclone commands
+- **Test button in modal**: Added 🧪 Test button to sync modal for pre-validation
+- **Error display**: Shows detailed error messages when test fails
+- **Success indicator**: Shows green success message when test passes
+- **Form data collection**: JavaScript properly collects all form fields including targets array
+
+**Result**: Users can now validate sync configurations before saving; helpful for debugging SSH key issues, path problems, and permission errors.
+
 ## 2026-03-26 — Fix sync edit form identity field handling
 
 **AI Model**: claude-haiku-4-5
