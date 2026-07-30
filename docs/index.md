@@ -1,4 +1,4 @@
-# sshfs-keeper — documentation
+# sshfs-keeper documentation
 
 Self-healing SSHFS/rclone mount daemon with a FastAPI web UI, sync jobs, Prometheus metrics, and webhook notifications.
 
@@ -31,7 +31,7 @@ local = "/mnt/nas"
 
 | Class | File | Role |
 |-------|------|------|
-| `AppConfig` | `config.py:80` | Top-level config; load / save / validate |
+| `AppConfig` | `config.py:80` | Top-level config: load, save, validate |
 | `Monitor` | `monitor.py:39` | Mount health-check + remount loop |
 | `MountState` | `monitor.py:25` | Per-mount runtime state |
 | `SyncManager` | `sync.py:131` | Interval-based rsync / lsyncd / rclone jobs |
@@ -80,20 +80,17 @@ backoff_base   = 60       # backoff_base * 2^n seconds between retries
 log_level      = "INFO"
 log_file       = ""       # optional rotating file (5 MB x 3 backups)
 json_logs      = false    # structured JSON log lines
-
 [api]
 host           = "0.0.0.0"
 port           = 8765
 api_key        = ""       # optional X-API-Key header
 ssl_certfile   = ""       # optional TLS certificate path
 ssl_keyfile    = ""       # optional TLS private key path
-
 [notifications]
 webhook_url    = ""       # Slack / Discord / ntfy.sh POST endpoint
 on_failure     = true
 on_recovery    = true
 on_backoff     = false
-
 [[mount]]
 name           = "nas"
 remote         = "user@host:/path"
@@ -103,7 +100,6 @@ options        = "cache=yes,compression=yes,ServerAliveInterval=15,..."
 identity       = ""       # path to SSH private key
 identity_passphrase = ""  # pre-loads key into ssh-agent
 enabled        = true
-
 [[sync]]
 name           = "backup"
 source         = "/local/data/"
