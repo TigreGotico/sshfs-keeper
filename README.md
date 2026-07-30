@@ -19,7 +19,7 @@ A daemon that monitors SSHFS (and rclone) mounts, automatically remounts them wh
 - REST API with optional `X-API-Key` authentication and optional TLS
 - Prometheus metrics at `GET /metrics`
 - Webhook notifications (Slack, Discord, ntfy.sh, any HTTP POST endpoint)
-- Atomic config saves: `os.replace()` + `.bak` — survives SIGKILL mid-write
+- Atomic config saves (`os.replace()` + `.bak`): survives SIGKILL mid-write
 - SIGHUP config reload: adds/removes mounts without restarting
 - `install-service`: generates systemd user unit, launchd plist, or NSSM batch script
 
@@ -51,12 +51,12 @@ sshfs-keeper install-service  # write systemd/launchd/NSSM service file
 
 ## Web UI
 
-_Web UI screenshot — open http://localhost:8765 after starting the daemon._
+_Web UI screenshot: open [http://localhost:8765](http://localhost:8765) after starting the daemon._
 
 ## Docs
 
-- [docs/index.md](docs/index.md) — overview, key classes, CLI reference, endpoint table
-- [docs/configuration.md](docs/configuration.md) — full config.toml field reference
-- [docs/api.md](docs/api.md) — REST API reference
-- [docs/architecture.md](docs/architecture.md) — component overview and data flow
-- [FAQ.md](FAQ.md) — common questions
+- [docs/index.md](docs/index.md): overview, key classes, CLI reference, endpoint table
+- [docs/configuration.md](docs/configuration.md): full config.toml field reference
+- [docs/api.md](docs/api.md): REST API reference
+- [docs/architecture.md](docs/architecture.md): component overview and data flow
+- [FAQ.md](FAQ.md): common questions
